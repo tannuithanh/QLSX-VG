@@ -22,9 +22,9 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  server: {
-    host: "172.23.13.102", // 👈 bind vào IP này
-    port: 5179,            // 👈 chạy port 5179
-    strictPort: true,      // 👈 nếu 5179 đang bận thì báo lỗi, ko tự đổi
-  },
+  // server: {
+  //   host: "172.23.13.102", // 👈 bind vào IP này
+  //   port: 5179,            // 👈 chạy port 5179
+  //   strictPort: true,      // 👈 nếu 5179 đang bận thì báo lỗi, ko tự đổi
+  // },
 });

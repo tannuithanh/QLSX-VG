@@ -262,6 +262,8 @@ function processWorkbook(wb) {
   const out = []
   rows.forEach(r => {
     const e = []
+
+    // ===== 1) Validate bắt buộc =====
     if (!r.__dateISO) e.push('Không nhận dạng được "Ngày sản xuất".')
     if (!required(r.xuong)) e.push('Thiếu "Xưởng".')
     if (!required(r.to_nhom)) e.push('Thiếu "Tổ/nhóm".')
@@ -269,11 +271,46 @@ function processWorkbook(wb) {
     if (!required(r.ma_hang)) e.push('Thiếu "Mã hàng".')
     if (!numLike(r.sl_loi)) e.push('"SL lỗi" phải là số.')
 
-    // cột Hủy: chỉ trống hoặc chữ "hủy"
+    // Cột Hủy: chỉ trống hoặc "hủy"
     if (String(r.huy_raw ?? '').trim() !== '' && !r.__is_huy) {
       e.push('Cột "Hủy" chỉ được ghi "hủy" (không phân biệt hoa/thường, có/không dấu) hoặc để trống.')
     }
 
+    // ===== 2) Quy tắc Stage/Code trong cùng một dòng =====
+    // 2.1 Có stage thì bắt buộc phải có code (cho từng cặp 1..3)
+    for (let i = 1; i <= 3; i++) {
+      const st = String(r[`cd_ps_${i}`] ?? '').trim()
+      const cd = String(r[`ma_loi_${i}`] ?? '').trim()
+      if (st && !cd) e.push(`Công đoạn PS ${i} có nhưng thiếu Mã lỗi ${i}.`)
+    }
+
+    // 2.2 Không được trùng "mã lỗi" giữa 3 cặp (dù khác stage)
+    const codeList = [r.ma_loi_1, r.ma_loi_2, r.ma_loi_3]
+      .map(v => codeKey(v))      // chuẩn hoá: trim + upper
+      .filter(Boolean)           // bỏ rỗng
+    const dupCode = (new Set(codeList)).size !== codeList.length
+    if (dupCode) {
+      e.push('Trong cùng một dòng: không được trùng "Mã lỗi" giữa các cột (Mã lỗi 1–3).')
+    }
+
+    // 2.3 Được phép trùng stage, nhưng KHÔNG được trùng cặp (stage + code)
+    const pairSet = new Set()
+    let dupPair = false
+    for (let i = 1; i <= 3; i++) {
+      const rawStage = String(r[`cd_ps_${i}`] ?? '').trim()
+      const rawCode = String(r[`ma_loi_${i}`] ?? '').trim()
+      if (!rawStage || !rawCode) continue
+      const stKey = viSlug(rawStage)   // chuẩn hoá stage: bỏ dấu, lower
+      const cdKey = codeKey(rawCode)   // chuẩn hoá code: upper
+      const key = `${stKey}__${cdKey}`
+      if (pairSet.has(key)) { dupPair = true; break }
+      pairSet.add(key)
+    }
+    if (dupPair) {
+      e.push('Trong cùng một dòng: không được trùng cặp (Công đoạn + Mã lỗi).')
+    }
+
+    // ===== 3) Kết luận dòng / Build payload =====
     if (e.length) {
       rowErrors.push({ row: r.__row, errors: e })
     } else {
@@ -297,6 +334,7 @@ function processWorkbook(wb) {
       })
     }
   })
+
 
   // Preview
   previewRows.value = rows.slice(0, 800)

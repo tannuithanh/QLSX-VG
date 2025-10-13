@@ -7,16 +7,20 @@
                 v-model:dateFrom="dateFrom" v-model:dateTo="dateTo" @submit="runReport" @reset="onReset" />
 
             <!-- Chọn biểu đồ -->
-            <div class="mt-2" style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+            <div style="margin-top: 30px;display:flex; gap:16px; align-items:center; flex-wrap:wrap">
                 <a-checkbox v-model:checked="showAll">Chọn tất cả</a-checkbox>
-                <a-checkbox :checked="selected.includes('pie')" @change="() => toggle('pie')">Tổng lỗi theo tổ
-                    (tròn)</a-checkbox>
-                <a-checkbox :checked="selected.includes('bar')" @change="() => toggle('bar')">Dạng lỗi theo
-                    tổ(cột)</a-checkbox>
-                <a-checkbox :checked="selected.includes('rate')" @change="() => toggle('rate')">Tỷ lệ lỗi / sản lượng
-                    (tròn)</a-checkbox>
-                <a-checkbox :checked="selected.includes('cancel')" @change="() => toggle('cancel')">Đơn hàng hủy theo tổ
-                    (cột)</a-checkbox>
+                <a-checkbox :checked="selected.includes('pie')" @change="() => toggle('pie')">
+                    Tỷ lệ lỗi theo công đoạn (tròn)
+                </a-checkbox>
+                <a-checkbox :checked="selected.includes('bar')" @change="() => toggle('bar')">
+                    Dạng lỗi theo tổ (cột)
+                </a-checkbox>
+                <a-checkbox :checked="selected.includes('rate')" @change="() => toggle('rate')">
+                    Tỷ lệ lỗi / số lượng thực tế (tròn)
+                </a-checkbox>
+                <a-checkbox :checked="selected.includes('cancel')" @change="() => toggle('cancel')">
+                    Biểu đồ thể hiện hàng hủy của các tổ (cột)
+                </a-checkbox>
             </div>
         </a-card>
 
@@ -32,18 +36,21 @@
 
             <div v-else class="chart-stack">
                 <!-- Chart 1 -->
-                <TeamErrorPie v-if="selected.includes('pie')"
-                    :key="`pie-${workshopId}-${dateFrom}-${dateTo}-${chartRows.length}-${selected.length}`"
-                    :data="chartRows" :visible="selected.includes('pie')" :height="chartHeight" :loading="loading" />
+                <StageErrorRatePie v-if="selected.includes('pie')"
+                    :key="`stagepie-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
+                    :rows="rawRows" :entries="actualRows" :workshop-id="workshopId" :visible="selected.includes('pie')"
+                    :height="chartHeight" />
 
                 <a-divider
                     v-if="selected.includes('pie') && (selected.includes('bar') || selected.includes('rate') || selected.includes('cancel'))"
                     dashed />
 
-                <!-- Chart 2 -->
+                <!-- Chart 2: Dạng lỗi giữa các tổ (stacked % theo actual) -->
                 <TeamErrorCodeBar v-if="selected.includes('bar')"
-                    :key="`bar-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${selected.length}`"
-                    :rows="rawRows" :visible="selected.includes('bar')" :height="chartHeight" :top-n="10" />
+                    :key="`bar-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
+                    :rows="rawRows" :entries="actualRows" :visible="selected.includes('bar')" :height="chartHeight"
+                    :top-n="10" sort-by="rate" :max-types="6"
+                    title="TỶ LỆ (%) CÁC DẠNG LỖI / SẢN PHẨM THỰC TẾ THEO TỔ" />
 
                 <a-divider v-if="selected.includes('bar') && (selected.includes('rate') || selected.includes('cancel'))"
                     dashed />
@@ -57,10 +64,10 @@
 
                 <!-- Chart 4 -->
                 <TeamCancelledOrdersBar v-if="selected.includes('cancel')"
-                    :key="`cancel-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${selected.length}`"
-                    :rows="rawRows" :visible="selected.includes('cancel')" :height="chartHeight" :top-n="12" />
+                    :key="`cancel-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
+                    :rows="rawRows" :entries="actualRows" :visible="selected.includes('cancel')" :height="chartHeight"
+                    :top-n="12" />
             </div>
-
         </a-card>
     </div>
 </template>
@@ -70,7 +77,7 @@ import { ref, computed, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import ErrorPieToolbar from './components/ErrorPieToolbar.vue'
-import TeamErrorPie from './components/TeamErrorPie.vue'
+import StageErrorRatePie from './components/StageErrorRatePie.vue'
 import TeamErrorCodeBar from './components/TeamErrorCodeBar.vue'
 import TeamErrorRatePie from './components/TeamErrorRatePie.vue'
 import TeamCancelledOrdersBar from './components/TeamCancelledOrdersBar.vue'
@@ -85,9 +92,10 @@ const workshopId = ref(null)
 const dateFrom = ref(null)
 const dateTo = ref(null)
 
-const chartRows = ref([]) // pie: tổng lỗi theo tổ
-const rawRows = ref([]) // bar: raw lỗi
-const rateRows = ref([]) // rate: { name, value, errors, actual }
+const chartRows = ref([])   // pie: tổng lỗi theo tổ
+const rawRows = ref([])     // bar: raw lỗi
+const rateRows = ref([])    // rate: { name, value, errors, actual }
+const actualRows = ref([])  // ✅ entries năng suất theo tổ
 
 /* chọn biểu đồ */
 const selected = ref(['pie', 'bar', 'rate', 'cancel'])
@@ -119,7 +127,7 @@ const hasData = computed(() =>
 const fmtDmy = s => dayjs(String(s)).isValid() ? dayjs(String(s)).format('DD/MM/YYYY') : ''
 const workshopName = computed(() => {
     const w = workshops.value.find(x => Number(x.id) === Number(workshopId.value))
-    return w ? `${w.name} (${w.code})` : ''
+    return w ? w.name : ''
 })
 
 /* masters */
@@ -142,7 +150,7 @@ async function runReport() {
     if (!validateInputs()) return
     loading.value = true
     try {
-        // 1) Lấy lỗi
+        // 1) Lấy lỗi & entries
         const [errRes, peRows] = await Promise.all([
             dataErrorApi.list({
                 workshop_id: workshopId.value,
@@ -157,22 +165,26 @@ async function runReport() {
                 date_to: dateTo.value,
             }),
         ])
-        const errRows = Array.isArray(errRes?.data) ? errRes.data :
-            (Array.isArray(errRes?.data?.data) ? errRes.data.data : [])
+
+        const errRows = Array.isArray(errRes?.data) ? errRes.data
+            : (Array.isArray(errRes?.data?.data) ? errRes.data.data : [])
 
         // Lưu raw cho BAR
         rawRows.value = errRows
+        actualRows.value = Array.isArray(peRows) ? peRows : []  // ✅ gán entries
 
         // 2) Gom cho PIE (tổng lỗi theo tổ)
         const byTeamErr = new Map()
         for (const r of errRows) {
             const tid = Number(r.team_id || 0)
-            const name = r?.team?.name ? `${r.team.name} (${r.team.code})` : (tid ? `Tổ ${tid}` : 'Không rõ tổ')
+            const name = r?.team?.name ? r.team.name : (tid ? `Tổ ${tid}` : 'Không rõ tổ')
             const val = Number(r.error_qty ?? r.defect_qty ?? r.qty_error ?? 0)
             if (!byTeamErr.has(tid)) byTeamErr.set(tid, { name, value: 0 })
             byTeamErr.get(tid).value += (Number.isFinite(val) ? val : 0)
         }
-        chartRows.value = Array.from(byTeamErr.values()).filter(x => x.value > 0).sort((a, b) => b.value - a.value)
+        chartRows.value = Array.from(byTeamErr.values())
+            .filter(x => x.value > 0)
+            .sort((a, b) => b.value - a.value)
 
         // 3) Gom năng suất theo tổ (qty_actual)
         const byTeamActual = new Map()
@@ -181,7 +193,7 @@ async function runReport() {
             byTeamActual.set(tid, (byTeamActual.get(tid) || 0) + Number(p.qty_actual || 0))
         }
 
-        // 4) Tính rate = tổng lỗi / tổng actual * 100 (ẩn = 0 hoặc actual = 0)
+        // 4) Tính rate = tổng lỗi / tổng actual * 100
         const rateArr = []
         for (const [tid, e] of byTeamErr.entries()) {
             const actual = byTeamActual.get(tid) || 0
@@ -190,7 +202,6 @@ async function runReport() {
             if (rate <= 0) continue
             rateArr.push({ name: e.name, value: Number(rate.toFixed(2)), errors: e.value, actual })
         }
-        // lớn → nhỏ
         rateArr.sort((a, b) => b.value - a.value)
         rateRows.value = rateArr
 
@@ -210,6 +221,7 @@ function onReset() {
     chartRows.value = []
     rawRows.value = []
     rateRows.value = []
+    actualRows.value = []   // ✅ reset luôn
     selected.value = ['pie', 'bar', 'rate']
 }
 
@@ -248,6 +260,4 @@ onMounted(loadWorkshops)
     grid-template-columns: 1fr;
     gap: 16px;
 }
-
-/* Nếu muốn 2 chart đặt cạnh nhau trên màn rộng, bạn có thể đổi two-or-more thành 1fr 1fr */
 </style>

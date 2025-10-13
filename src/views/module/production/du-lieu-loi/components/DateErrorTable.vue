@@ -76,7 +76,7 @@ const columns = [
 
     { title: 'Đơn hàng', dataIndex: 'order_no', key: 'order_no', width: 180, customRender: ({ text }) => Ellip(text) },
     { title: 'Mã hàng', dataIndex: 'item_code', key: 'item_code', width: 160, customRender: ({ text }) => Ellip(text) },
-    { title: 'SL lỗi', dataIndex: 'error_qty', key: 'error_qty', width: 84, align: 'right' },
+    { title: 'SL lỗi', dataIndex: 'error_qty', key: 'error_qty', width: 84, align: 'center' },
 
     {
         title: 'Lỗi 1',

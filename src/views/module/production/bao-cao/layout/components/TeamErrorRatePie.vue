@@ -8,11 +8,11 @@
             <a-card size="small" class="grand">
                 <div class="grand-row">
                     <div class="grand-item">
-                        <div class="lbl">Grand Total – Tổng lỗi</div>
+                        <div class="lbl">Tổng lỗi</div>
                         <div class="val">{{ totalErrors }}</div>
                     </div>
                     <div class="grand-item">
-                        <div class="lbl">Grand Total – Tổng sản lượng</div>
+                        <div class="lbl">Tổng sản phẩm</div>
                         <div class="val">{{ totalActual }}</div>
                     </div>
                     <div class="grand-item">
@@ -20,7 +20,7 @@
                         <div class="val">{{ overallRate.toFixed(2) }}%</div>
                     </div>
                 </div>
-            </a-card>   
+            </a-card>
         </div>
     </div>
 
@@ -42,7 +42,7 @@ const props = defineProps({
     teamNameById: { type: Object, default: () => ({}) },
 
     height: { type: [String, Number], default: 420 },
-    title: { type: String, default: 'BIỂU ĐỒ TỶ LỆ TỔNG LỖI / TỔNG SẢN LƯỢNG GIỮA CÁC TỔ' },
+    title: { type: String, default: 'TỶ LỆ TỔNG LỖI / TỔNG SỐ LƯỢNG THỰC TẾ CỦA TỔ' },
     visible: { type: Boolean, default: true },
 })
 
@@ -56,7 +56,7 @@ function nameOfTeam(id, fallback = '') {
     const byMap = props.teamNameById?.[id]
     if (byMap) return byMap
     const r = props.errors.find(x => Number(x.team_id) === Number(id))
-    if (r?.team?.name) return `${r.team.name}${r.team.code ? ` (${r.team.code})` : ''}`
+    if (r?.team?.name) return r.team.name
     return fallback || `Tổ ${id}`
 }
 
@@ -110,10 +110,48 @@ const seriesItems = computed(() => {
 })
 const hasData = computed(() => seriesItems.value.length > 0)
 
-/* Grand total (tổng lỗi, tổng sản lượng, % chung) */
-const totalErrors = computed(() => seriesItems.value.reduce((s, x) => s + Number(x.errors || 0), 0))
-const totalActual = computed(() => seriesItems.value.reduce((s, x) => s + Number(x.actual || 0), 0))
-const overallRate = computed(() => (totalActual.value > 0 ? (totalErrors.value / totalActual.value) * 100 : 0))
+/* Grand total (tổng lỗi, tổng SẢN PHẨM, % chung) */
+// Thay block total cũ bằng:
+const totalErrors = computed(() => {
+    // Nếu truyền sẵn data (prepared)
+    if ((props.data || []).length) {
+        return props.data.reduce((s, x) => s + Number(x.errors || 0), 0)
+    }
+    // Raw: cộng toàn bộ lỗi theo team (kể cả team lỗi = 0 vẫn giữ, giá trị 0)
+    const m = new Map()
+    for (const r of props.errors) {
+        const tid = Number(r.team_id || 0)
+        const val = Number(String(r.error_qty ?? r.defect_qty ?? r.qty_error ?? 0).replace(/,/g, ''))
+        if (!Number.isFinite(val)) continue
+        m.set(tid, (m.get(tid) || 0) + val)
+    }
+    let sum = 0
+    for (const v of m.values()) sum += v
+    return sum
+})
+
+const totalActual = computed(() => {
+    // Nếu truyền sẵn data (prepared)
+    if ((props.data || []).length) {
+        return props.data.reduce((s, x) => s + Number(x.actual || 0), 0)
+    }
+    // Raw: cộng toàn bộ actual theo team (kể cả team lỗi = 0)
+    const m = new Map()
+    for (const r of props.entries) {
+        const tid = Number(r.team_id || 0)
+        const val = Number(String(r.qty_actual ?? 0).replace(/,/g, ''))
+        if (!Number.isFinite(val)) continue
+        m.set(tid, (m.get(tid) || 0) + val)
+    }
+    let sum = 0
+    for (const v of m.values()) sum += v
+    return sum
+})
+
+const overallRate = computed(() =>
+    totalActual.value > 0 ? (totalErrors.value / totalActual.value) * 100 : 0
+)
+
 
 
 /* ---------- chart ---------- */
@@ -134,81 +172,81 @@ function disposeChart() {
     }
 }
 function render() {
-  nextTick(() => {
-    if (!props.visible || !hasData.value) {
-      disposeChart()
-      return
-    }
-    ensureChart()
-    if (!chart) return
+    nextTick(() => {
+        if (!props.visible || !hasData.value) {
+            disposeChart()
+            return
+        }
+        ensureChart()
+        if (!chart) return
 
-    // Lấy font từ AntD (CSS var) hoặc fallback sang font-stack chuẩn
-    const root = chart.getDom()
-    const cs = getComputedStyle(root)
-    const antFontVar = cs.getPropertyValue('--ant-font-family')?.trim()
-    const FONT_STACK =
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
-    const fontFamily =
-      antFontVar && antFontVar.length ? antFontVar : FONT_STACK
+        // Lấy font từ AntD (CSS var) hoặc fallback sang font-stack chuẩn
+        const root = chart.getDom()
+        const cs = getComputedStyle(root)
+        const antFontVar = cs.getPropertyValue('--ant-font-family')?.trim()
+        const FONT_STACK =
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+        const fontFamily =
+            antFontVar && antFontVar.length ? antFontVar : FONT_STACK
 
-    const data = seriesItems.value.map(d => ({
-      name: d.name,
-      value: Number(d.value),
-      _err: Number(d.errors || 0),
-      _act: Number(d.actual || 0),
-      _rate: Number(d.value),
-    }))
+        const data = seriesItems.value.map(d => ({
+            name: d.name,
+            value: Number(d.value),
+            _err: Number(d.errors || 0),
+            _act: Number(d.actual || 0),
+            _rate: Number(d.value),
+        }))
 
-    const option = {
-      // Áp font mặc định cho toàn bộ chart
-      textStyle: { fontFamily },
+        const option = {
+            // Áp font mặc định cho toàn bộ chart
+            textStyle: { fontFamily },
 
-      title: {
-        text: props.title,
-        left: 'center',
-        top: 6,
-        textStyle: { fontSize: 20, fontWeight: 700, fontFamily },
-      },
-      tooltip: {
-        trigger: 'item',
-        textStyle: { fontFamily },
-        formatter: (p) => {
-          const d = p.data || {}
-          return [
-            `<b>${p.name}</b>`,
-            `Tỷ lệ: ${d._rate?.toFixed(2)}%`,
-            `Lỗi/Sản lượng: ${d._err} / ${d._act}`,
-          ].join('<br/>')
-        },
-      },
-      legend: {
-        type: 'scroll',
-        orient: 'horizontal',
-        bottom: 8,
-        data: data.map(x => x.name),
-        textStyle: { fontFamily },
-      },
-      series: [
-        {
-          type: 'pie',
-          radius: ['30%', '70%'],
-          center: ['50%', '52%'],
-          avoidLabelOverlap: true,
-          label: {
-            show: true,
-            formatter: ({ data }) => `${data.name}\n${(data._rate ?? 0).toFixed(1)}%`,
-            fontFamily,
-          },
-          labelLine: { length: 12, length2: 10 },
-          data,
-        },
-      ],
-    }
+            title: {
+                text: props.title,
+                left: 'center',
+                top: 6,
+                textStyle: { fontSize: 20, fontWeight: 700, fontFamily },
+            },
+            tooltip: {
+                trigger: 'item',
+                textStyle: { fontFamily },
+                formatter: (p) => {
+                    const d = p.data || {}
+                    return [
+                        `<b>${p.name}</b>`,
+                        `Tỷ lệ: ${d._rate?.toFixed(2)}%`,
+                        `Lỗi/SẢN PHẨM: ${d._err} / ${d._act}`,
+                    ].join('<br/>')
+                },
+            },
+            legend: {
+                type: 'scroll',
+                orient: 'horizontal',
+                bottom: 8,
+                data: data.map(x => x.name),
+                textStyle: { fontFamily },
+            },
+            series: [
+                {
+                    type: 'pie',
+                    radius: ['30%', '70%'],
+                    center: ['50%', '52%'],
+                    avoidLabelOverlap: true,
+                    label: {
+                        show: true,
+                        formatter: ({ data }) => `${data.name}\n${(data._rate ?? 0).toFixed(1)}%`,
+                        fontFamily,
+                    },
+                    labelLine: { length: 12, length2: 10 },
+                    data,
+                },
+            ],
+        }
 
-    // notMerge = true để đảm bảo font & option áp ngay
-    chart.setOption(option, true)
-    chart.resize()
-  })
+        // notMerge = true để đảm bảo font & option áp ngay
+        chart.setOption(option, true)
+        chart.resize()
+    })
 }
 
 

@@ -55,7 +55,9 @@
             <router-link to="/san-xuat/bao-cao-nang-suat">Năng suất</router-link>
           </a-menu-item>
           <a-menu-item key="report-layout">
-            <template #icon><LayoutOutlined /></template>
+            <template #icon>
+              <LayoutOutlined />
+            </template>
             <router-link to="/san-xuat/bao-cao-layout">Thống kê lỗi</router-link>
           </a-menu-item>
         </a-sub-menu>

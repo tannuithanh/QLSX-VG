@@ -42,9 +42,9 @@ const columns = [
     { title: 'Bộ', dataIndex: 'bundle', align: 'center', width: 80, customRender: ({ text }) => (text ?? '—') },
 
     // ✅ L/W/H hiển thị số nguyên (mm)
-    { title: 'L (mm)', dataIndex: 'L', align: 'center', customRender: ({ text }) => fmtInt(text) },
-    { title: 'W (mm)', dataIndex: 'W', align: 'center', customRender: ({ text }) => fmtInt(text) },
-    { title: 'H (mm)', dataIndex: 'H', align: 'center', customRender: ({ text }) => fmtInt(text) },
+    { title: 'L (cm)', dataIndex: 'L', align: 'center', customRender: ({ text }) => fmtInt(text) },
+    { title: 'W (cm)', dataIndex: 'W', align: 'center', customRender: ({ text }) => fmtInt(text) },
+    { title: 'H (cm)', dataIndex: 'H', align: 'center', customRender: ({ text }) => fmtInt(text) },
 
     // Diện tích SP chuẩn (m²)
     {

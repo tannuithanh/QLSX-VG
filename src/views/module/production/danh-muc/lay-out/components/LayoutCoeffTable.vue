@@ -48,7 +48,7 @@ const columns = [
 
     // Diện tích SP chuẩn (m²)
     {
-        title: 'Diện tích sản phẩm chuẩn (m²)',
+        title: 'Diện tích sản phẩm (m²)',
         dataIndex: 'coefficient',
         align: 'center',
         customRender: ({ text }) => (text == null ? '—' : fmtNum(text)),

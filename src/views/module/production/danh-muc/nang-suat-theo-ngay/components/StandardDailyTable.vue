@@ -26,14 +26,15 @@ const props = defineProps({
 
 const emits = defineEmits(['refresh', 'delete', 'edit'])
 
-function formatNumber(n, frac = 2) {
-    const num = Number(n)
-    if (Number.isNaN(num)) return '0'
-    return num.toLocaleString(undefined, {
-        minimumFractionDigits: frac,
-        maximumFractionDigits: frac,
-    })
+function formatNumber(n, frac = 4) {
+  const num = Number(n)
+  if (!Number.isFinite(num)) return '0'
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: 0,   // ⬅️ không ép 4 số 0 nữa
+    maximumFractionDigits: frac // ⬅️ vẫn giới hạn tối đa 4 số thập phân
+  })
 }
+
 function formatDateTime(s) {
     if (!s) return '—'
     const d = new Date(s)

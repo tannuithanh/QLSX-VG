@@ -34,7 +34,7 @@
             </a-tab-pane>
 
             <!-- Năng suất theo ngày: NSTN-VIEW -->
-            <a-tab-pane v-if="can('NSTN-VIEW')" key="nang-suat-theo-ngay" tab="Năng suất theo ngày">
+            <a-tab-pane v-if="can('NSTN-VIEW')" key="nang-suat-theo-ngay" tab="Năng suất theo nhân công">
                 <NsTheoNgayIndex />
             </a-tab-pane>
 

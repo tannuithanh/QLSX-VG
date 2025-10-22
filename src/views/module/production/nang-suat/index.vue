@@ -1,3 +1,4 @@
+<!-- ProductivityPage.vue -->
 <template>
     <div class="stack">
         <div class="actions" v-if="canAdd">
@@ -11,9 +12,12 @@
 
         <ProductivityFilter v-model="filters" :workshops="workshops" :teams="teams" @search="applyFilters" />
 
-        <!-- Truyền layoutMap để Table có thể hiển thị SL theo SP Layout khi record chưa có giá trị đã lưu -->
         <ProductivityTable :data-source="pagedData" :pagination="pagination" :layout-map="layoutRatioMap"
-            @change="onTableChange" @edit="openEdit" @delete="onDelete" @save-one="saveOneCalcs"  :can-edit="canEdit" :can-delete="canDelete" />
+            @change="onTableChange" @edit="openEdit" @delete="onDelete" @save-one="saveOneCalcs" :can-edit="canEdit"
+            :can-delete="canDelete" />
+
+        <!-- Panel HỢP NHẤT: thiếu hệ số chuẩn / thiếu hệ số layout -->
+        <ProductivityIssuesPanel :std-missing-list="stdMissingList" :layout-issue-list="layoutIssueList" />
 
         <ProductivityModal v-model:visible="modalVisible" :workshops="workshops" :teams="teams" :initial="editing"
             @submit="handleSubmit" @cancel="() => (modalVisible = false)" />
@@ -23,19 +27,13 @@
 </template>
 
 <script setup>
-/**
- * Trang quản lý năng suất — tính “SL theo SP Layout” = qty_actual * layout_ratio
- * - layout_ratio tra theo 11 ký tự đầu của item_code (substr(0, 11)), uppercase + trim
- * - Nếu không tìm thấy: cảnh báo rõ lý do cho người dùng
- * - “Lưu tất cả” tổng hợp cảnh báo; “Lưu 1 dòng” báo cụ thể
- */
-
 import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 
 import ProductivityFilter from './components/ProductivityFilter.vue'
 import ProductivityTable from './components/ProductivityTable.vue'
+import ProductivityIssuesPanel from './components/ProductivityIssuesPanel.vue'
 import ProductivityModal from './components/ProductivityModal.vue'
 import ImportExcelModal from './components/ImportExcelModal.vue'
 
@@ -54,30 +52,17 @@ const norm = (c) => String(c ?? '').trim().toUpperCase()
 const isAdmin = computed(() => !!user.value?.is_admin)
 const moduleCodes = computed(() => new Set((user.value?.modules || []).map(m => norm(m.code))))
 const can = (code) => isAdmin.value || moduleCodes.value.has(norm(code))
-
 const canAdd = computed(() => can('DLNS-ADD'))
 const canEdit = computed(() => can('DLNS-EDIT'))
 const canDelete = computed(() => can('DLNS-DELETE'))
-/* =========================
- * Utils cơ bản
- * ========================= */
 
-/** Chuẩn hoá mã hàng: trim + uppercase */
+/* ===== Utils ===== */
 const toCode = (s) => String(s || '').trim().toUpperCase()
-
-/** Lấy “mã tra cứu layout” = 11 ký tự đầu của mã (sau khi chuẩn hoá) */
 const toLayoutKey = (s) => toCode(s).substring(0, 11)
-
-/** Làm tròn về số nguyên (phù hợp với cách lưu trước đây) */
 const toIntOrNull = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v)) : null
 
-/* =========================
- * Master data: xưởng / tổ
- * ========================= */
-const workshops = ref([])
-const teams = ref([])
-
-/** Tải danh mục xưởng/tổ */
+/* ===== Master data ===== */
+const workshops = ref([]); const teams = ref([])
 async function fetchMaster() {
     try {
         const [ws, ts] = await Promise.all([
@@ -92,12 +77,8 @@ async function fetchMaster() {
     }
 }
 
-/* =========================
- * Hệ số chuẩn (để tính cột “SL theo SP chuẩn” khi hiển thị)
- * ========================= */
+/* ===== Hệ số chuẩn ===== */
 const stdCoeffMap = ref(new Map())
-
-/** Tải hệ số chuẩn và build Map { item_code => coefficient } */
 async function fetchStdCoefficients() {
     try {
         const list = await standardCoefficientApi.listAll().catch(() => [])
@@ -114,48 +95,28 @@ async function fetchStdCoefficients() {
     }
 }
 
-/* =========================
- * layout_ratio (để tính/hiển thị cột “SL theo SP Layout”)
- * ========================= */
+/* ===== layout_ratio (key11) ===== */
 const layoutRatioMap = ref(new Map())
-
-/** Tải hệ số layout và build Map theo 11 ký tự đầu của mã */
 async function fetchLayoutRatios() {
     try {
         const list = await layoutCoefficientApi.listAll()
-
-        console.log('[LAYOUT] sample API rows:',
-            (list || []).slice(0, 5).map(r => ({
-                item_code: r?.item_code, layout_ratio: r?.layout_ratio, typeof_layout_ratio: typeof r?.layout_ratio,
-            }))
-        )
-
         const map = new Map()
         for (const r of Array.isArray(list) ? list : []) {
             const key11 = toLayoutKey(r?.item_code)
             const raw = r?.layout_ratio
             const num = (raw === '' || raw == null) ? null : Number(raw)
             if (!key11) continue
-            if (Number.isFinite(num)) {
-                map.set(key11, num)
-            } else {
-                console.warn('[LAYOUT] bad ratio row:', { item_code: r?.item_code, key11, layout_ratio: raw })
-            }
+            if (Number.isFinite(num)) map.set(key11, num)
         }
         layoutRatioMap.value = map
-        console.log('[LAYOUT] layoutRatioMap size =', map.size)
     } catch (e) {
         console.error(e)
         message.warn('Không tải được layout_ratio, cột layout có thể trống')
     }
 }
 
-/* =========================
- * Danh sách năng suất
- * ========================= */
+/* ===== Danh sách năng suất ===== */
 const allRows = ref([])
-
-/** Tải danh sách năng suất và gắn sẵn “SL theo SP chuẩn” để hiển thị */
 async function fetchEntries() {
     try {
         const list = await productivityEntryApi.listAll()
@@ -165,7 +126,6 @@ async function fetchEntries() {
             const qtyStandard = (coe != null && Number.isFinite(coe)) ? qty * coe : null
             return { ...row, _std_coefficient: coe ?? null, qty_standard_product: qtyStandard }
         })
-
         mapped.sort((a, b) =>
             String(b.production_date).localeCompare(String(a.production_date)) || (b.id - a.id)
         )
@@ -177,85 +137,33 @@ async function fetchEntries() {
     }
 }
 
-/* =========================
- * Bộ lọc + phân trang
- * ========================= */
-const filters = ref({
-    dateRange: [],
-    workshop_id: null,
-    team_id: null,
-    order_no: '',
-    item_code: '',
-})
+/* ===== Bộ lọc + phân trang ===== */
+const filters = ref({ dateRange: [], workshop_id: null, team_id: null, order_no: '', item_code: '' })
+const pagination = reactive({ current: 1, pageSize: 10, total: 0, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'] })
 
-const pagination = reactive({
-    current: 1,
-    pageSize: 10,
-    total: 0,
-    showSizeChanger: true,
-    pageSizeOptions: ['10', '20', '50', '100'],
-})
-
-/** Áp dụng các filter để tạo danh sách đã lọc */
 const filtered = computed(() => {
-    const r = filters.value
-    let rows = allRows.value
-
+    const r = filters.value; let rows = allRows.value
     if (Array.isArray(r.dateRange) && r.dateRange.length === 2) {
         const [from, to] = r.dateRange
-        rows = rows.filter(x => {
-            const d = String(x.production_date || '')
-            return (!from || d >= from) && (!to || d <= to)
-        })
+        rows = rows.filter(x => { const d = String(x.production_date || ''); return (!from || d >= from) && (!to || d <= to) })
     }
     if (r.workshop_id) rows = rows.filter(x => Number(x.workshop_id) === Number(r.workshop_id))
     if (r.team_id) rows = rows.filter(x => Number(x.team_id) === Number(r.team_id))
-    if (r.order_no?.trim()) {
-        const q = r.order_no.trim().toLowerCase()
-        rows = rows.filter(x => String(x.order_no || '').toLowerCase().includes(q))
-    }
-    if (r.item_code?.trim()) {
-        const q = r.item_code.trim().toLowerCase()
-        rows = rows.filter(x => String(x.item_code || '').toLowerCase().includes(q))
-    }
+    if (r.order_no?.trim()) { const q = r.order_no.trim().toLowerCase(); rows = rows.filter(x => String(x.order_no || '').toLowerCase().includes(q)) }
+    if (r.item_code?.trim()) { const q = r.item_code.trim().toLowerCase(); rows = rows.filter(x => String(x.item_code || '').toLowerCase().includes(q)) }
     return rows
 })
-
-/** Dữ liệu hiển thị theo trang */
-const pagedData = computed(() => {
-    pagination.total = filtered.value.length
-    const start = (pagination.current - 1) * pagination.pageSize
-    return filtered.value.slice(start, start + pagination.pageSize)
-})
-
-/** Khi nhấn “Tìm” → quay lại trang 1 */
+const pagedData = computed(() => { pagination.total = filtered.value.length; const s = (pagination.current - 1) * pagination.pageSize; return filtered.value.slice(s, s + pagination.pageSize) })
 function applyFilters() { pagination.current = 1 }
+function onTableChange(p) { pagination.current = Number(p.current || 1); pagination.pageSize = Number(p.pageSize || pagination.pageSize) }
 
-/** Khi đổi trang/kích thước */
-function onTableChange(p) {
-    pagination.current = Number(p.current || 1)
-    pagination.pageSize = Number(p.pageSize || pagination.pageSize)
-}
-
-/* =========================
- * Tính “SL theo SP Layout” + log & lý do
- * ========================= */
-
-/**
- * Tính SL theo SP Layout cho 1 dòng:
- * - Lấy key 11 ký tự đầu: key11 = toLayoutKey(item_code)
- * - Nếu không tìm thấy ratio -> trả null, đồng thời trả reason (để hiển thị cho user)
- * - Nếu tìm thấy -> qty_layout_output = round(qty_actual * ratio)
- * @returns { rounded: number|null, ratio: number|undefined, reason: string|null, key11: string }
- */
+/* ===== Tính layout cho lưu ===== */
 function computeLayoutOne(row) {
     const codeRaw = row?.item_code
     const key11 = toLayoutKey(codeRaw)
     const qty = Number(row?.qty_actual)
     const ratio = layoutRatioMap.value.get(key11)
-
-    let rounded = null
-    let reason = null
+    let rounded = null, reason = null
 
     if (!Number.isFinite(qty)) {
         reason = 'Số lượng thực tế không hợp lệ'
@@ -265,134 +173,71 @@ function computeLayoutOne(row) {
         reason = `Giá trị Hệ số layout không hợp lệ cho mã: ${key11}`
     } else {
         const product = Number(ratio) * qty
-        rounded = toIntOrNull(product) // đổi sang toFixed(2) nếu muốn lưu 2 chữ số
+        // Rule: >0 thì tối thiểu 1
+        rounded = Number.isFinite(product)
+            ? (product > 0 ? Math.max(1, Math.round(product)) : Math.round(product))
+            : null
     }
-
-    console.log('[LAYOUT:ROW]', {
-        id: row?.id, item_code: codeRaw, key11, qty, ratio, rounded, reason: reason || 'ok',
-    })
-
     return { rounded, ratio, reason, key11 }
 }
 
-/* =========================
- * Lưu TẤT CẢ
- * ========================= */
+/* ===== Lưu TẤT CẢ ===== */
 const savingAll = ref(false)
-
 async function saveAllCalcs() {
     try {
         savingAll.value = true
-
         const rows = allRows.value.map(r => {
-            // SP chuẩn (giữ nguyên cách tính)
             const qty = Number(r?.qty_actual ?? 0)
             const coe = Number(r?._std_coefficient ?? null)
             const stdQty = Number.isFinite(coe) ? qty * coe : null
-
-            // SP Layout theo key11
             const { rounded, reason, key11 } = computeLayoutOne(r)
-
-            return {
-                id: r.id,
-                qty_standard_product: toIntOrNull(stdQty),
-                qty_layout_output: rounded,
-                __reason: reason,
-                __key11: key11,
-            }
+            return { id: r.id, qty_standard_product: toIntOrNull(stdQty), qty_layout_output: rounded, __reason: reason, __key11: key11 }
         })
 
-        // Log bảng kiểm tra trước khi gửi
-        console.table(rows.map(x => ({
-            id: x.id, key11: x.__key11, std: x.qty_standard_product, layout: x.qty_layout_output, reason: x.__reason || ''
-        })))
-
-        // Tổng hợp cảnh báo khi có lý do
         const failed = rows.filter(x => x.__reason)
         if (failed.length) {
             const sample = failed.slice(0, 5).map(x => `#${x.id} (${x.__key11}): ${x.__reason}`).join(' | ')
             message.warning(`Một số dòng không thể tính layout: ${failed.length} dòng. Ví dụ: ${sample}`)
         }
 
-        const compact = rows
-            .filter(x => x.qty_standard_product != null || x.qty_layout_output != null)
-            .map(({ __reason, __key11, ...rest }) => rest)
+        const compact = rows.filter(x => x.qty_standard_product != null || x.qty_layout_output != null).map(({ __reason, __key11, ...rest }) => rest)
+        if (!compact.length) { message.info('Không có dữ liệu để lưu'); return }
 
-        if (!compact.length) {
-            message.info('Không có dữ liệu để lưu')
-            return
-        }
-
-        // Gửi theo lô
         const size = 200
         for (let i = 0; i < compact.length; i += size) {
-            const slice = compact.slice(i, i + size)
-            console.log(`[LAYOUT] sending bulk ${i}..${i + slice.length - 1}`, slice)
-            await productivityEntryApi.saveCalcsBulk(slice)
+            await productivityEntryApi.saveCalcsBulk(compact.slice(i, i + size))
         }
-
-        message.success(`Đã tính & lưu cho ${compact.length} bản ghi.`)
-        await fetchEntries()
+        message.success(`Đã tính & lưu cho ${compact.length} bản ghi.`); await fetchEntries()
     } catch (e) {
         console.error(e)
         message.error(e?.response?.data?.message || e?.message || 'Lỗi khi tính & lưu tất cả')
-    } finally {
-        savingAll.value = false
-    }
+    } finally { savingAll.value = false }
 }
 
-/* =========================
- * Lưu 1 dòng
- * ========================= */
+/* ===== Lưu 1 dòng ===== */
 async function saveOneCalcs(row) {
     try {
         const qty = Number(row?.qty_actual ?? 0)
         const coe = Number(row?._std_coefficient ?? null)
         const stdQty = Number.isFinite(coe) ? qty * coe : null
-
         const { rounded, reason, key11 } = computeLayoutOne(row)
-
-        if (reason) {
-            message.warning(`(#${row.id}) ${reason}`)
-        }
-
-        await productivityEntryApi.saveCalcs(row.id, {
-            qty_standard_product: toIntOrNull(stdQty),
-            qty_layout_output: rounded,
-        })
-
-        message.success(`Đã tính & lưu cho mã hàng: ${row.item_code} (key: ${key11})`)
-        await fetchEntries()
+        if (reason) message.warning(`(#${row.id}) ${reason}`)
+        await productivityEntryApi.saveCalcs(row.id, { qty_standard_product: toIntOrNull(stdQty), qty_layout_output: rounded })
+        message.success(`Đã tính & lưu cho mã hàng: ${row.item_code} (key: ${key11})`); await fetchEntries()
     } catch (e) {
         console.error(e)
         message.error(e?.response?.data?.message || e?.message || 'Lỗi khi tính & lưu mã này')
     }
 }
 
-/* =========================
- * CRUD & Import (giữ nguyên)
- * ========================= */
-const modalVisible = ref(false)
-const editing = ref(null)
+/* ===== CRUD & Import ===== */
+const modalVisible = ref(false); const editing = ref(null)
 function openCreate() { editing.value = null; modalVisible.value = true }
 function openEdit(r) { editing.value = { ...r }; modalVisible.value = true }
-
 const importVisible = ref(false)
 function openImport() { importVisible.value = true }
 async function onImported() { importVisible.value = false; await fetchEntries(); message.success('Đã cập nhật danh sách sau khi import') }
-
-async function onDelete(id) {
-    try {
-        await productivityEntryApi.remove(id)
-        message.success('Đã xoá bản ghi')
-        await fetchEntries()
-    } catch (e) {
-        console.error(e)
-        message.error(e?.response?.data?.message || e?.message || 'Không xoá được bản ghi')
-    }
-}
-
-/** Submit modal tạo/sửa */
+async function onDelete(id) { try { await productivityEntryApi.remove(id); message.success('Đã xoá bản ghi'); await fetchEntries() } catch (e) { console.error(e); message.error(e?.response?.data?.message || e?.message || 'Không xoá được bản ghi') } }
 async function handleSubmit(payload) {
     const finalPayload = {
         production_date: payload.production_date ? dayjs(payload.production_date).format('YYYY-MM-DD') : null,
@@ -402,35 +247,50 @@ async function handleSubmit(payload) {
         item_code: payload.item_code || '',
         qty_actual: Number(payload.qty_actual ?? 0),
     }
-
-    if (!finalPayload.production_date || !finalPayload.workshop_id || !finalPayload.team_id) {
-        message.error('Thiếu thông tin bắt buộc: Ngày, Xưởng hoặc Tổ!')
-        return
-    }
-
+    if (!finalPayload.production_date || !finalPayload.workshop_id || !finalPayload.team_id) { message.error('Thiếu thông tin bắt buộc: Ngày, Xưởng hoặc Tổ!'); return }
     try {
-        if (editing.value?.id) {
-            await productivityEntryApi.update(editing.value.id, finalPayload)
-            message.success('Cập nhật năng suất thành công!')
-        } else {
-            await productivityEntryApi.create(finalPayload)
-            message.success('Thêm năng suất thành công!')
-        }
-        modalVisible.value = false
-        await fetchEntries()
+        if (editing.value?.id) { await productivityEntryApi.update(editing.value.id, finalPayload); message.success('Cập nhật năng suất thành công!') }
+        else { await productivityEntryApi.create(finalPayload); message.success('Thêm năng suất thành công!') }
+        modalVisible.value = false; await fetchEntries()
     } catch (e) {
-        console.error(e)
-        const msg =
-            e?.response?.data?.message ||
-            (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join(', ')) ||
-            e?.message || 'Lỗi khi lưu dữ liệu'
+        const msg = e?.response?.data?.message || (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join(', ')) || e?.message || 'Lỗi khi lưu dữ liệu'
         message.error(msg)
     }
 }
 
-/* =========================
- * Khởi động
- * ========================= */
+/* ===== DỮ LIỆU CHO PANEL THIẾU (reactive) ===== */
+// Thiếu hệ số chuẩn: _std_coefficient không phải số
+const stdMissingList = computed(() =>
+    filtered.value
+        .filter(r => !Number.isFinite(Number(r?._std_coefficient)))
+        .map(r => ({
+            item_code: r.item_code,
+            layout_key11: toLayoutKey(r.item_code),
+            _std_coefficient: r._std_coefficient,
+            layout_ratio: Number(layoutRatioMap.value.get(toLayoutKey(r.item_code))) || null,
+        }))
+)
+
+// Thiếu layout: thiếu layout_ratio theo key11 hoặc (tuỳ bạn) các case layout = 0
+const layoutIssueList = computed(() => {
+    return filtered.value.map(r => {
+        const key11 = toLayoutKey(r.item_code)
+        const ratio = Number(layoutRatioMap.value.get(key11))
+        const saved = Number(r.qty_layout_output)
+        const reason = !Number.isFinite(ratio)
+            ? 'Thiếu hệ số layout'
+            : (Number.isFinite(saved) && saved === 0 ? 'SL theo SP Layout = 0' : '')
+        return {
+            item_code: r.item_code,
+            layout_key11: key11,
+            layout_ratio: Number.isFinite(ratio) ? ratio : null,
+            _std_coefficient: r._std_coefficient,
+            reason,
+        }
+    }).filter(x => x.layout_ratio == null || x.reason === 'SL theo SP Layout = 0')
+})
+
+/* ===== Khởi động ===== */
 onMounted(async () => {
     await Promise.all([fetchMaster(), fetchStdCoefficients(), fetchLayoutRatios()])
     await fetchEntries()

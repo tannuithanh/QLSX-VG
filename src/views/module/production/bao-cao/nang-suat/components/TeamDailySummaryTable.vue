@@ -98,7 +98,7 @@ const seriesDaily = computed(() => {
     const kpi = []
     const ratioPct = [] // %
     for (const r of (props.rows || [])) {
-        cats.push(`${r.workshop_name ?? ''} - ${r.team_label ?? r.team_id}`)
+        cats.push(`${r.team_label ?? r.team_id}`)
         const t = toNum(r.tong_slsp_nang_suat)
         const s = toNum(r.ns_chuan_ngay)
         total.push(t || null)

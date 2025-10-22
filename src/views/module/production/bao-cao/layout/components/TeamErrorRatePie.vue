@@ -33,12 +33,9 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 
 const props = defineProps({
-    /** Cách 1: truyền sẵn dữ liệu [{ name, value(%), errors, actual }] */
     data: { type: Array, default: () => [] },
-
-    /** Cách 2: truyền raw để component tự tính */
-    errors: { type: Array, default: () => [] },   // { team_id, error_qty, ... }
-    entries: { type: Array, default: () => [] },  // { team_id, qty_actual, ... }
+    errors: { type: Array, default: () => [] },
+    entries: { type: Array, default: () => [] },
     teamNameById: { type: Object, default: () => ({}) },
 
     height: { type: [String, Number], default: 420 },
@@ -63,7 +60,6 @@ function nameOfTeam(id, fallback = '') {
 /* ----- chuẩn hóa input thành cùng 1 format {name, value, errors, actual} ----- */
 const fromPrepared = computed(() => {
     const arr = (props.data || []).filter(x => Number(x.actual) > 0 && Number(x.value) > 0)
-    // sắp xếp giảm dần theo % để hiển thị đẹp
     arr.sort((a, b) => Number(b.value) - Number(a.value))
     return arr
 })
@@ -111,13 +107,10 @@ const seriesItems = computed(() => {
 const hasData = computed(() => seriesItems.value.length > 0)
 
 /* Grand total (tổng lỗi, tổng SẢN PHẨM, % chung) */
-// Thay block total cũ bằng:
 const totalErrors = computed(() => {
-    // Nếu truyền sẵn data (prepared)
     if ((props.data || []).length) {
         return props.data.reduce((s, x) => s + Number(x.errors || 0), 0)
     }
-    // Raw: cộng toàn bộ lỗi theo team (kể cả team lỗi = 0 vẫn giữ, giá trị 0)
     const m = new Map()
     for (const r of props.errors) {
         const tid = Number(r.team_id || 0)
@@ -131,11 +124,9 @@ const totalErrors = computed(() => {
 })
 
 const totalActual = computed(() => {
-    // Nếu truyền sẵn data (prepared)
     if ((props.data || []).length) {
         return props.data.reduce((s, x) => s + Number(x.actual || 0), 0)
     }
-    // Raw: cộng toàn bộ actual theo team (kể cả team lỗi = 0)
     const m = new Map()
     for (const r of props.entries) {
         const tid = Number(r.team_id || 0)
@@ -179,8 +170,6 @@ function render() {
         }
         ensureChart()
         if (!chart) return
-
-        // Lấy font từ AntD (CSS var) hoặc fallback sang font-stack chuẩn
         const root = chart.getDom()
         const cs = getComputedStyle(root)
         const antFontVar = cs.getPropertyValue('--ant-font-family')?.trim()
@@ -188,7 +177,6 @@ function render() {
             "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
         const fontFamily =
             antFontVar && antFontVar.length ? antFontVar : FONT_STACK
-
         const data = seriesItems.value.map(d => ({
             name: d.name,
             value: Number(d.value),
@@ -196,9 +184,7 @@ function render() {
             _act: Number(d.actual || 0),
             _rate: Number(d.value),
         }))
-
         const option = {
-            // Áp font mặc định cho toàn bộ chart
             textStyle: { fontFamily },
 
             title: {
@@ -222,9 +208,14 @@ function render() {
             legend: {
                 type: 'scroll',
                 orient: 'horizontal',
-                bottom: 8,
-                data: data.map(x => x.name),
-                textStyle: { fontFamily },
+                bottom: 0,
+                left: 'center',
+                itemGap: 24,
+                itemWidth: 18,
+                itemHeight: 12,
+                pageButtonItemGap: 10,
+                pageIconSize: 12,
+                textStyle: { fontFamily /*, fontSize: 12*/ },
             },
             series: [
                 {
@@ -242,15 +233,11 @@ function render() {
                 },
             ],
         }
-
-        // notMerge = true để đảm bảo font & option áp ngay
         chart.setOption(option, true)
         chart.resize()
     })
 }
 
-
-/* Re-render khi dữ liệu/hiển thị/tham số thay đổi */
 watch(
     [() => props.visible, seriesItems, () => props.height, () => props.title],
     render,

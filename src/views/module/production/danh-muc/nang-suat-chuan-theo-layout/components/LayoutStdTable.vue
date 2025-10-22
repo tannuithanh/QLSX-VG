@@ -24,11 +24,12 @@ const props = defineProps({
 })
 const emits = defineEmits(['refresh', 'delete', 'edit'])
 
-function formatNumber(n, f = 2) {
+function formatNumber(n, f = 4) {
     const num = Number(n)
     if (Number.isNaN(num)) return '0'
-    return num.toLocaleString(undefined, { minimumFractionDigits: f, maximumFractionDigits: f })
+    return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: f })
 }
+
 function formatDateTime(s) {
     if (!s) return '—'
     const d = new Date(s)

@@ -18,7 +18,7 @@
                 <a-input-number v-model:value="form.H" :min="0" :step="1" :precision="0" style="width: 100%" />
             </a-form-item>
 
-            <a-form-item label="Hệ số (coefficient)" name="coefficient" required>
+            <a-form-item label="Diện tích sản phẩm (m²)" name="coefficient" required>
                 <a-input-number v-model:value="form.coefficient" :min="0" :precision="4" :step="0.0001"
                     style="width: 100%" />
             </a-form-item>

@@ -3,35 +3,29 @@
         cancel-text="Huỷ" destroy-on-close @ok="submit" @cancel="$emit('cancel')" width="720px">
         <a-form :model="form" layout="vertical">
             <div class="grid grid-2">
-                <!-- Ngày -->
                 <a-form-item label="Ngày sản xuất" required>
                     <a-date-picker v-model:value="form.production_date" value-format="YYYY-MM-DD" format="DD/MM/YYYY"
                         style="width:100%" placeholder="Chọn ngày" />
                 </a-form-item>
 
-                <!-- Xưởng -->
                 <a-form-item label="Xưởng" required>
                     <a-select v-model:value="form.workshop_id" :options="workshopOptions" placeholder="Chọn xưởng"
                         style="width:100%" show-search :filter-option="filterOption" @change="onWorkshopChange" />
                 </a-form-item>
 
-                <!-- Tổ -->
                 <a-form-item label="Tổ" required>
                     <a-select v-model:value="form.team_id" :options="teamOptionsFiltered" placeholder="Chọn tổ"
                         style="width:100%" show-search :filter-option="filterOption" @change="onTeamChange" />
                 </a-form-item>
 
-                <!-- Đơn hàng -->
                 <a-form-item label="Đơn hàng" required>
                     <a-input v-model:value="form.order_no" placeholder="VD: ABC" allow-clear />
                 </a-form-item>
 
-                <!-- Mã hàng -->
                 <a-form-item label="Mã hàng" required>
                     <a-input v-model:value="form.item_code" placeholder="VD: 66-00100-S1" allow-clear />
                 </a-form-item>
 
-                <!-- Số lượng -->
                 <a-form-item label="SLSX thực tế" required>
                     <a-input-number v-model:value="form.qty_actual" :min="0" :step="1" style="width:100%" />
                 </a-form-item>
@@ -50,6 +44,7 @@ const props = defineProps({
     initial: { type: Object, default: null },
     workshops: { type: Array, default: () => [] },
     teams: { type: Array, default: () => [] },
+    createdByName: { type: String, default: '' }, // 🆕 nhận từ cha
 })
 const emit = defineEmits(['update:visible', 'submit', 'cancel'])
 
@@ -65,8 +60,7 @@ const form = reactive({
     order_no: '',
     item_code: '',
     qty_actual: 0,
-    qty_standard_output: 0,
-    qty_layout_output: 0,
+    created_by_name: '', // 🆕
 })
 
 const isEdit = computed(() => !!props.initial?.id)
@@ -96,10 +90,7 @@ function onTeamChange(tid) {
 }
 
 watch(() => props.initial, (v) => {
-    if (!v) {
-        reset()
-        return
-    }
+    if (!v) { reset(); return }
     form.production_date = v.production_date || dayjs().format('YYYY-MM-DD')
     form.workshop_id = v.workshop_id ?? null
     form.team_id = v.team_id ?? null
@@ -115,26 +106,25 @@ function reset() {
     form.order_no = ''
     form.item_code = ''
     form.qty_actual = 0
+    form.created_by_name = props.createdByName || '' // 🆕 mặc định tên người dùng
 }
 
 function submit() {
-    // Validate bắt buộc theo yêu cầu của bạn
     if (!form.production_date || !form.workshop_id || !form.team_id) {
         message.error('Vui lòng chọn ngày, xưởng và tổ')
         return
     }
-    const orderNo = String(form.order_no || '').trim()
-    const itemCode = String(form.item_code || '').trim()
-    if (!orderNo) { message.error('Vui lòng nhập Đơn hàng (ví dụ: ABC)'); return }
-    if (!itemCode) { message.error('Vui lòng nhập Mã hàng (ví dụ: 66-00100-S1)'); return }
+    if (!form.order_no.trim()) return message.error('Vui lòng nhập Đơn hàng')
+    if (!form.item_code.trim()) return message.error('Vui lòng nhập Mã hàng')
 
     emit('submit', {
         production_date: form.production_date,
         workshop_id: Number(form.workshop_id),
         team_id: Number(form.team_id),
-        order_no: orderNo,
-        item_code: itemCode,
+        order_no: form.order_no.trim(),
+        item_code: form.item_code.trim(),
         qty_actual: Number(form.qty_actual || 0),
+        created_by_name: form.created_by_name || props.createdByName || 'System', // 🆕
     })
 }
 </script>

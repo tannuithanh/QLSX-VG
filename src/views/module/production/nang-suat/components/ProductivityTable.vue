@@ -19,15 +19,12 @@ import TableActionButtons from '@/components/common/TableActionButtons.vue'
 const props = defineProps({
     dataSource: { type: Array, default: () => [] },
     pagination: { type: Object, default: () => ({ current: 1, pageSize: 10, total: 0 }) },
-    // Map { key11 (11 ký tự đầu của item_code, upper) => layout_ratio }
     layoutMap: { type: Object, default: () => new Map() },
     canDelete: { type: Boolean, default: false },
     canEdit: { type: Boolean, default: false },
+    isAdmin: { type: Boolean, default: false },
 })
 const emit = defineEmits(['change', 'edit', 'delete', 'save-one'])
-
-/* ===== Utils ===== */
-const toLayoutKey = (s) => String(s || '').trim().toUpperCase().substring(0, 11)
 
 function fmtInt(n) {
     const v = Number(n)
@@ -49,26 +46,26 @@ const sttRender = ({ index }) => {
  * - Nếu chưa có, tự tính theo key11 và áp dụng quy tắc: >0 thì tối thiểu 1
  */
 function displayLayoutQty(record) {
-  // 1) ĐÃ LƯU: dùng rule >0 ⇒ max(1, round(...))
-  const savedNum = Number(record?.qty_layout_output)
-  if (Number.isFinite(savedNum)) {
-    const rounded = savedNum > 0 ? Math.max(1, Math.round(savedNum)) : Math.round(savedNum)
+    // 1) ĐÃ LƯU: dùng rule >0 ⇒ max(1, round(...))
+    const savedNum = Number(record?.qty_layout_output)
+    if (Number.isFinite(savedNum)) {
+        const rounded = savedNum > 0 ? Math.max(1, Math.round(savedNum)) : Math.round(savedNum)
+        return rounded.toLocaleString()
+    }
+
+    // 2) CHƯA LƯU: tự tính theo key11 + rule >0 ⇒ max(1, round(...))
+    const key11 = String(record?.item_code || '').trim().toUpperCase().substring(0, 11)
+    const ratio = Number(props.layoutMap.get(key11))
+    const qty = Number(record?.qty_actual)
+    if (!Number.isFinite(ratio) || !Number.isFinite(qty)) return '—'
+
+    const product = Number(ratio) * qty
+    // trước đây: rounded = toIntOrNull(product)
+    const rounded = Number.isFinite(product)
+        ? (product > 0 ? Math.max(1, Math.round(product)) : Math.round(product))
+        : null
+
     return rounded.toLocaleString()
-  }
-
-  // 2) CHƯA LƯU: tự tính theo key11 + rule >0 ⇒ max(1, round(...))
-  const key11 = String(record?.item_code || '').trim().toUpperCase().substring(0, 11)
-  const ratio = Number(props.layoutMap.get(key11))
-  const qty   = Number(record?.qty_actual)
-  if (!Number.isFinite(ratio) || !Number.isFinite(qty)) return '—'
-
-const product = Number(ratio) * qty
-// trước đây: rounded = toIntOrNull(product)
-const rounded = Number.isFinite(product)
-  ? (product > 0 ? Math.max(1, Math.round(product)) : Math.round(product))
-  : null
-
-  return rounded.toLocaleString()
 }
 
 
@@ -83,35 +80,48 @@ const columns = [
     { title: 'SL thực tế', dataIndex: 'qty_actual', align: 'right', customRender: ({ text }) => fmtInt(text) },
     { title: 'SL theo SP chuẩn', dataIndex: 'qty_standard_product', align: 'right', customRender: ({ text }) => fmtInt(text) },
     { title: 'SL theo SP Layout', key: 'qty_layout_output_display', align: 'right', customRender: ({ record }) => displayLayoutQty(record) },
-    {
-        title: 'Thao tác',
-        key: 'actions',
-        width: 180,
-        fixed: 'right',
-        align: 'center',
-        customRender: ({ record }) => {
-            const r = record || {}
-            const plain = {
-                id: r.id,
-                production_date: r.production_date,
-                workshop_id: r.workshop_id,
-                team_id: r.team_id,
-                order_no: r.order_no,
-                item_code: r.item_code,
-                qty_actual: r.qty_actual,
-                qty_standard_output: r.qty_standard_output,
-                qty_layout_output: r.qty_layout_output,
-            }
-            return h(TableActionButtons, {
-                showView: false,
-                showEdit: props.canEdit,
-                showDelete: props.canDelete,
-                confirmOnDelete: true,
-                onEdit: () => emit('edit', plain),
-                onDelete: () => emit('delete', plain.id),
-                // extraButtons: [{ text: 'Lưu tính', onClick: () => emit('save-one', r) }],
-            })
-        },
-    },
 ]
+
+// 👉 Nếu là admin, thêm cột “Người tạo” trước cột thao tác
+if (props.isAdmin) {
+    columns.push({
+        title: 'Người tạo',
+        dataIndex: 'created_by_name',
+        align: 'center',
+        width: 150,
+        customRender: ({ text }) => text || '—',
+    })
+}
+
+// Cuối cùng thêm cột thao tác
+columns.push({
+    title: 'Thao tác',
+    key: 'actions',
+    width: 180,
+    fixed: 'right',
+    align: 'left',
+    customRender: ({ record }) => {
+        const r = record || {}
+        const plain = {
+            id: r.id,
+            production_date: r.production_date,
+            workshop_id: r.workshop_id,
+            team_id: r.team_id,
+            order_no: r.order_no,
+            item_code: r.item_code,
+            qty_actual: r.qty_actual,
+            qty_standard_output: r.qty_standard_output,
+            qty_layout_output: r.qty_layout_output,
+        }
+        return h(TableActionButtons, {
+            showView: false,
+            showEdit: props.canEdit,
+            showDelete: props.canDelete,
+            confirmOnDelete: true,
+            onEdit: () => emit('edit', plain),
+            onDelete: () => emit('delete', plain.id),
+        })
+    },
+})
+
 </script>

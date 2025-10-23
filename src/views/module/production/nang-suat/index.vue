@@ -5,7 +5,7 @@
             <h2 style="margin:0">Quản lý năng suất</h2>
             <a-space>
                 <a-button @click="openImport">Import Excel</a-button>
-                <a-button :loading="savingAll" @click="saveAllCalcs">Lưu tính TẤT CẢ</a-button>
+                <a-button :loading="savingAll" @click="saveAllCalcs">Lưu tính tất cả</a-button>
                 <a-button type="primary" @click="openCreate">Thêm năng suất</a-button>
             </a-space>
         </div>
@@ -14,13 +14,13 @@
 
         <ProductivityTable :data-source="pagedData" :pagination="pagination" :layout-map="layoutRatioMap"
             @change="onTableChange" @edit="openEdit" @delete="onDelete" @save-one="saveOneCalcs" :can-edit="canEdit"
-            :can-delete="canDelete" />
+            :can-delete="canDelete"  :is-admin="isAdmin" />
 
         <!-- Panel HỢP NHẤT: thiếu hệ số chuẩn / thiếu hệ số layout -->
         <ProductivityIssuesPanel :std-missing-list="stdMissingList" :layout-issue-list="layoutIssueList" />
 
         <ProductivityModal v-model:visible="modalVisible" :workshops="workshops" :teams="teams" :initial="editing"
-            @submit="handleSubmit" @cancel="() => (modalVisible = false)" />
+            @submit="handleSubmit" @cancel="() => (modalVisible = false)" :created-by-name="user.value?.name" />
 
         <ImportExcelModal v-model:visible="importVisible" @done="onImported" @cancel="() => (importVisible = false)" />
     </div>
@@ -47,7 +47,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
-
 const norm = (c) => String(c ?? '').trim().toUpperCase()
 const isAdmin = computed(() => !!user.value?.is_admin)
 const moduleCodes = computed(() => new Set((user.value?.modules || []).map(m => norm(m.code))))
@@ -239,6 +238,7 @@ function openImport() { importVisible.value = true }
 async function onImported() { importVisible.value = false; await fetchEntries(); message.success('Đã cập nhật danh sách sau khi import') }
 async function onDelete(id) { try { await productivityEntryApi.remove(id); message.success('Đã xoá bản ghi'); await fetchEntries() } catch (e) { console.error(e); message.error(e?.response?.data?.message || e?.message || 'Không xoá được bản ghi') } }
 async function handleSubmit(payload) {
+    console.log(user.value?.name)
     const finalPayload = {
         production_date: payload.production_date ? dayjs(payload.production_date).format('YYYY-MM-DD') : null,
         workshop_id: payload.workshop_id || payload.workshop?.id || null,
@@ -246,6 +246,7 @@ async function handleSubmit(payload) {
         order_no: payload.order_no || '',
         item_code: payload.item_code || '',
         qty_actual: Number(payload.qty_actual ?? 0),
+        created_by_name: user.value?.name, // 🆕 thêm dòng này
     }
     if (!finalPayload.production_date || !finalPayload.workshop_id || !finalPayload.team_id) { message.error('Thiếu thông tin bắt buộc: Ngày, Xưởng hoặc Tổ!'); return }
     try {

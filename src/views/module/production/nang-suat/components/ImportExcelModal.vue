@@ -58,6 +58,11 @@ dayjs.extend(customParse)
 
 import { productivityEntryApi } from '@/services/production_service/productivityEntryService'
 import { validateItemCodeRule } from '@/utils/itemRuleHelper' // ✅ dùng helper mới
+import { useAuthStore } from '@/stores/auth'
+import { storeToRefs } from 'pinia'
+
+const auth = useAuthStore()
+const { user } = storeToRefs(auth)
 
 const props = defineProps({ visible: { type: Boolean, default: false } })
 const emit = defineEmits(['update:visible', 'cancel', 'done'])
@@ -244,6 +249,7 @@ async function submit() {
                 order_no,
                 item_code,
                 qty_actual: Number(qty_actual_raw),
+                created_by_name: user.value?.name || 'Không rõ', // 👈 THÊM DÒNG NÀY
             })
         }
     })

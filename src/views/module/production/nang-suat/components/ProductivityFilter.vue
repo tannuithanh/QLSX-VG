@@ -54,7 +54,11 @@ const local = reactive({
 
 // đồng bộ 2 chiều
 watch(() => props.modelValue, v => Object.assign(local, v || {}), { immediate: true, deep: true })
-watch(local, v => emit('update:modelValue', { ...v }), { deep: true })
+
+watch(local, v => {
+    emit('update:modelValue', { ...v })
+    emit('search') // 🔔 kích hoạt parent reset phân trang & áp dụng lọc
+}, { deep: true })
 
 const workshopOptions = computed(() =>
     (props.workshops || []).map(w => ({ label: `${w.name} (${w.code})`, value: w.id }))
@@ -75,14 +79,12 @@ function onTeamChange(newTid) {
     if (t && t.workshop_id) local.workshop_id = t.workshop_id
 }
 function onDateChange() {
-    // giữ nguyên; đã v-model value-format = 'YYYY-MM-DD'
+    // đã dùng v-model + value-format => không cần làm gì thêm
 }
 
 function filterOption(input, option) {
     return String(option?.label || '').toLowerCase().includes(String(input || '').toLowerCase())
 }
-
-
 </script>
 
 <style scoped>

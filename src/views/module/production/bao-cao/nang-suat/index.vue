@@ -14,7 +14,7 @@
                 <a-card>
                     <div class="mb-3 flex items-center justify-between">
                         <div>
-                            <strong>Ngày: </strong>
+                            <strong>Khoảng ngày: </strong>
                             <span v-if="selectedRangeText">{{ selectedRangeText }}</span>
                             <span v-else>Chưa chọn</span>
                         </div>
@@ -29,7 +29,7 @@
                         <TeamTotalsTable :rows="teamTotalsRows" :loading="loading" />
                     </div>
 
-                    <!-- Hai bảng tổng: đặt cùng một hàng -->
+                    <!-- Hai bảng tổng -->
                     <a-row :gutter="16" class="mt-4">
                         <a-col :span="12">
                             <TeamDailySummaryTable :rows="teamDailyRows" :loading="loading" />
@@ -38,7 +38,6 @@
                             <TeamLayoutSummaryTable :rows="teamLayoutRows" :loading="loading" />
                         </a-col>
                     </a-row>
-
                 </a-card>
             </a-col>
 
@@ -58,8 +57,6 @@ import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 
 import productionApi from '@/plugins/productionApi'
-import { standardCoefficientApi } from '@/services/production_service/standardCoefficientService'
-import { layoutCoefficientApi } from '@/services/production_service/layoutCoefficientService'
 import { standardDailyProductivityApi } from '@/services/production_service/standardDailyProductivityService'
 import { layoutStandardProductivityApi } from '@/services/production_service/layoutStandardProductivityService'
 import { workshopApi } from '@/services/production_service/workshopService'
@@ -75,7 +72,7 @@ import ChartTabs from './components/ChartTabs.vue'
 /* ====== state ====== */
 const reportType = ref('nang-suat')
 const loading = ref(false)
-/** chỉ dùng 1 ngày -> dùng dateFrom, dateTo bỏ trống để không vỡ props với Toolbar */
+/** HỖ TRỢ KHOẢNG NGÀY: dùng cả dateFrom & dateTo */
 const dateFrom = ref('')
 const dateTo = ref('')
 
@@ -112,16 +109,27 @@ async function fetchMaster() {
     }
 }
 
-/* ====== hiển thị ngày ====== */
+/* ====== hiển thị khoảng ngày ====== */
+const numDaysInRange = computed(() => {
+    if (!dateFrom.value || !dateTo.value) return 0
+    const a = dayjs(dateFrom.value)
+    const b = dayjs(dateTo.value)
+    if (!a.isValid() || !b.isValid()) return 0
+    return Math.abs(b.startOf('day').diff(a.startOf('day'), 'day')) + 1
+})
+
 const selectedRangeText = computed(() => {
-    if (!dateFrom.value) return ''
-    return dayjs(dateFrom.value).format('DD/MM/YYYY')
+    if (!dateFrom.value || !dateTo.value) return ''
+    const a = dayjs(dateFrom.value), b = dayjs(dateTo.value)
+    if (!a.isValid() || !b.isValid()) return ''
+    const aStr = a.format('DD/MM/YYYY')
+    const bStr = b.format('DD/MM/YYYY')
+    const days = numDaysInRange.value
+    return aStr === bStr ? `${aStr} (1 ngày)` : `${aStr} – ${bStr} (${days} ngày)`
 })
 
 /* ====== gọi API entries ====== */
-
 async function fetchProductivityEntries(params) {
-    // Truyền đúng filter cho BE, để BE lọc luôn
     // Backend hỗ trợ: date_from, date_to, workshop_id, team_id, order_no, item_code
     const { data } = await productionApi.get('/productivity-entries', { params })
     return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
@@ -152,7 +160,6 @@ function groupByWTT(entries = []) {
                 slsp_nang_suat: 0,
                 slsp_layout: 0,
 
-                // để biết có bản ghi nào có giá trị không
                 _std_any: false,
                 _layout_any: false,
             })
@@ -175,12 +182,11 @@ function groupByWTT(entries = []) {
         }
     }
 
-    // gán tên xưởng/tổ + set note nếu tất cả null
+    // gán tên + note
     for (const r of map.values()) {
         r.workshop_name = workshopMap.value.get(r.workshop_id) ?? String(r.workshop_id || '')
         r.team_name = teamMap.value.get(r.team_id) ?? String(r.team_id || '')
 
-        // nếu không có bất kỳ giá trị hợp lệ nào → đặt null và note
         if (!r._std_any) {
             r.slsp_nang_suat = null
             r.slsp_nang_suat_note = 'SLSP theo năng suất (DB) chưa có dữ liệu'
@@ -195,7 +201,6 @@ function groupByWTT(entries = []) {
             r.slsp_layout_note = null
         }
 
-        // xoá cờ nội bộ
         delete r._std_any
         delete r._layout_any
     }
@@ -203,39 +208,37 @@ function groupByWTT(entries = []) {
     return Array.from(map.values())
 }
 
-
 /* ====== data chi tiết ====== */
 const reportRows = ref([])
 
 /* ====== map năng suất chuẩn để chia (theo team) ====== */
-const stdDailyMap = ref(new Map())   // team_id -> std_qty
-const stdLayoutMap = ref(new Map())  // team_id -> layout_std_qty
+const stdDailyMap = ref(new Map())   // team_id -> std_qty (chuẩn/ngày)
+const stdLayoutMap = ref(new Map())  // team_id -> layout_std_qty (chuẩn/ngày)
 
 async function buildReport() {
-    if (!dateFrom.value) return
+    if (!dateFrom.value || !dateTo.value) return
     loading.value = true
     try {
-        // Filter đưa về BE luôn:
+        // Filter đưa về BE: KHOẢNG NGÀY
         const params = {
             date_from: dateFrom.value,
-            date_to: dateFrom.value,               // 1 ngày
+            date_to: dateTo.value,
             workshop_id: searchWorkshopId.value || undefined,
             team_id: searchTeamId.value || undefined,
-            item_code: (search.value || '').trim() || undefined, // tìm theo mã
-            // order_no:  bạn thêm nếu muốn
+            item_code: (search.value || '').trim() || undefined,
         }
 
         const [entries, stdDaily, stdLayout] = await Promise.all([
-            fetchProductivityEntries(params),                 // <-- đọc đúng theo filter
+            fetchProductivityEntries(params),
             standardDailyProductivityApi.listAll().catch(() => []),
             layoutStandardProductivityApi.listAll().catch(() => []),
         ])
 
-        // map chuẩn theo team (phục vụ %)
+        // map chuẩn theo team (đơn vị: /ngày)
         stdDailyMap.value = new Map((stdDaily || []).map(r => [Number(r.team_id), Number(r.std_qty ?? null)]))
         stdLayoutMap.value = new Map((stdLayout || []).map(r => [Number(r.team_id), Number(r.layout_std_qty ?? null)]))
 
-        // nhóm + CỘNG từ DB
+        // nhóm + cộng từ DB
         reportRows.value = groupByWTT(entries)
 
         // reset trang
@@ -247,6 +250,7 @@ async function buildReport() {
         loading.value = false
     }
 }
+
 /* ====== filter client-side cho bảng chi tiết ====== */
 const filteredRows = computed(() => {
     const q = search.value.trim().toLowerCase()
@@ -308,13 +312,15 @@ const teamTotalsRows = computed(() => {
     })
 })
 
-/* ====== Hai bảng/biểu đồ tổng: tính % = (Tổng / NS chuẩn) * 100 ====== */
-const teamDailyRows = computed(() =>
-    teamTotalsRows.value.map(x => {
-        const nsNgay = stdDailyMap.value.get(Number(x.team_id)) ?? null
+/* ====== Hai bảng tổng: % = Tổng / (NS chuẩn * số ngày) ====== */
+const teamDailyRows = computed(() => {
+    const days = Math.max(1, numDaysInRange.value || 1)
+    return teamTotalsRows.value.map(x => {
+        const nsNgay = stdDailyMap.value.get(Number(x.team_id)) ?? null    // chuẩn/ngày
         const total = x.total_slsp_nang_suat ?? null
-        const ratioPct = (nsNgay && total != null && Number(nsNgay) !== 0)
-            ? (Number(total) / Number(nsNgay)) * 100
+        const nsKhoang = (nsNgay != null && Number.isFinite(Number(nsNgay))) ? Number(nsNgay) * days : null
+        const ratioPct = (nsKhoang && total != null && Number(nsKhoang) !== 0)
+            ? (Number(total) / Number(nsKhoang)) * 100
             : null
         return {
             workshop_id: x.workshop_id,
@@ -322,18 +328,20 @@ const teamDailyRows = computed(() =>
             team_id: x.team_id,
             team_label: x.team_name,
             tong_slsp_nang_suat: total,
-            ns_chuan_ngay: nsNgay,
-            ty_le_pct: ratioPct, // <- % để chart dùng
+            ns_chuan_ngay: nsKhoang, // tổng chuẩn theo KHOẢNG
+            ty_le_pct: ratioPct,
         }
     })
-)
+})
 
-const teamLayoutRows = computed(() =>
-    teamTotalsRows.value.map(x => {
-        const nsLayout = stdLayoutMap.value.get(Number(x.team_id)) ?? null
+const teamLayoutRows = computed(() => {
+    const days = Math.max(1, numDaysInRange.value || 1)
+    return teamTotalsRows.value.map(x => {
+        const nsLayout = stdLayoutMap.value.get(Number(x.team_id)) ?? null // chuẩn/ngày
         const total = x.total_slsp_layout ?? null
-        const ratioPct = (nsLayout && total != null && Number(nsLayout) !== 0)
-            ? (Number(total) / Number(nsLayout)) * 100
+        const nsKhoang = (nsLayout != null && Number.isFinite(Number(nsLayout))) ? Number(nsLayout) * days : null
+        const ratioPct = (nsKhoang && total != null && Number(nsKhoang) !== 0)
+            ? (Number(total) / Number(nsKhoang)) * 100
             : null
         return {
             workshop_id: x.workshop_id,
@@ -341,19 +349,19 @@ const teamLayoutRows = computed(() =>
             team_id: x.team_id,
             team_label: x.team_name,
             tong_slsp_layout: total,
-            ns_chuan_layout: nsLayout,
-            ty_le_pct: ratioPct, // <- % để chart dùng
+            ns_chuan_layout: nsKhoang, // tổng chuẩn theo KHOẢNG
+            ty_le_pct: ratioPct,
         }
     })
-)
+})
 
 /* ====== biểu đồ (tắt) ====== */
 const chartRows = computed(() => [])
 
 /* ====== handlers ====== */
-function onSubmitRange({ dateFrom: df }) {
+function onSubmitRange({ dateFrom: df, dateTo: dt }) {
     dateFrom.value = df
-    dateTo.value = '' // không dùng
+    dateTo.value = dt
     buildReport()
 }
 function reload() { buildReport() }

@@ -1,9 +1,9 @@
 <template>
     <div class="toolbar">
         <div class="left">
-            <!-- Chọn 1 ngày duy nhất -->
-            <a-date-picker class="ml" v-model:value="oneDay" format="YYYY-MM-DD" valueFormat="YYYY-MM-DD"
-                placeholder="Chọn ngày" :disabled="loading" />
+            <!-- Khoảng ngày -->
+            <a-range-picker class="ml" v-model:value="range" format="DD/MM/YYYY" value-format="YYYY-MM-DD"
+                placeholder="Chọn khoảng ngày" :disabled="loading" :allow-clear="true" />
 
             <!-- Xưởng -->
             <a-select class="ml sel" v-model:value="workshopId" :options="workshopOptions" allow-clear
@@ -28,11 +28,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 
 const props = defineProps({
     loading: Boolean,
-    dateFrom: String, // giữ để tương thích với parent
-    dateTo: String,   // giữ để tương thích với parent
+    dateFrom: String, // để sync từ parent nếu có
+    dateTo: String,   // để sync từ parent nếu có
 
     // v-model
     reportType: { type: String, default: 'nang-suat' },
@@ -46,19 +47,18 @@ const props = defineProps({
     workshopId: [String, Number],
     teamId: [String, Number],
 })
+
 const emits = defineEmits([
     'submit', 'reload',
     'update:reportType', 'update:search',
     'update:workshopId', 'update:teamId'
 ])
 
-// Chỉ 1 ngày: ưu tiên dùng dateFrom; fallback dateTo
-const oneDay = ref(props.dateFrom || props.dateTo || '')
-watch(() => props.dateFrom, v => {
-    if (v) oneDay.value = v
-})
-watch(() => props.dateTo, v => {
-    if (!oneDay.value && v) oneDay.value = v
+// Range nội bộ: ['YYYY-MM-DD', 'YYYY-MM-DD']
+const range = ref([props.dateFrom || '', props.dateTo || ''])
+watch(() => [props.dateFrom, props.dateTo], ([df, dt]) => {
+    // đồng bộ từ parent -> child
+    range.value = [df || '', dt || '']
 })
 
 const rt = computed({
@@ -103,12 +103,21 @@ function filterOption(input, option) {
 }
 
 function emitSubmit() {
-    if (!oneDay.value) {
-        message.warning('Vui lòng chọn ngày.')
+    const [df, dt] = range.value || []
+    if (!df || !dt) {
+        message.warning('Vui lòng chọn khoảng ngày (từ ngày & đến ngày).')
         return
     }
-    // Gửi cùng 1 ngày cho cả from/to để tương thích với parent
-    emits('submit', { dateFrom: oneDay.value, dateTo: oneDay.value })
+    const a = dayjs(df), b = dayjs(dt)
+    if (!a.isValid() || !b.isValid()) {
+        message.warning('Ngày không hợp lệ.')
+        return
+    }
+    // auto-sắp xếp if user chọn ngược
+    const from = a.isAfter(b) ? b.format('YYYY-MM-DD') : a.format('YYYY-MM-DD')
+    const to = a.isAfter(b) ? a.format('YYYY-MM-DD') : b.format('YYYY-MM-DD')
+
+    emits('submit', { dateFrom: from, dateTo: to })
 }
 </script>
 

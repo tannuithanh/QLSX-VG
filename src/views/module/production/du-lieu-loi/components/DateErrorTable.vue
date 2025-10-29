@@ -35,13 +35,14 @@ const Ellip = (text) =>
         {
             title: () => (text ? String(text) : ''),
             default: () =>
-                h(
-                    Typography.Text,
-                    { ellipsis: true, style: 'max-width: 100%; display:block' },
-                    { default: () => (text ?? '') }
-                ),
+                h(Typography.Text, {
+                    ellipsis: true,
+                    style: 'max-width: 100%; display:block',
+                    content: text ?? '',
+                }),
         }
     )
+
 const fmtDmy = (s) => {
     const str = String(s || '')
     const d = str.endsWith('Z') ? dayjs.utc(str) : dayjs(str)
@@ -122,7 +123,7 @@ const columns = [
             if (props.canEdit) {
                 children.push(
                     h(EditOutlined, {
-                        style: 'color:#faad14; cursor:pointer',
+                        style: 'color:#faad14; cursor:pointer; margin-right:8px',
                         onClick: () => emit('edit', record),
                     })
                 )
@@ -139,13 +140,15 @@ const columns = [
                             onConfirm: () => emit('delete', record),
                         },
                         {
-                            default: () =>
-                                h(DeleteOutlined, { style: 'color:#f5222d; cursor:pointer' }),
+                            default: () => h(DeleteOutlined, { style: 'color:#f5222d; cursor:pointer' }),
                         }
                     )
                 )
             }
+
+            return h('span', {}, children.length ? children : '-')
         },
+
     }
 
 ]

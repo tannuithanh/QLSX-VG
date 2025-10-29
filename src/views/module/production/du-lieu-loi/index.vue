@@ -2,7 +2,7 @@
     <section>
         <a-space style="width:100%; justify-content: space-between; margin-bottom:12px">
             <h2 style="margin:0">Quản lý dữ liệu lỗi</h2>
-            <a-space v-if="canDelete">
+            <a-space v-if="canAdd">
                 <a-button @click="showImport = true">Import Excel</a-button>
                 <a-button type="primary" @click="openCreate()">Thêm mới</a-button>
             </a-space>

@@ -5,52 +5,34 @@
       <h2 style="margin:0">Quản lý năng suất</h2>
       <a-space>
         <a-button @click="openImport">Import Excel</a-button>
+
+        <!-- 🆕 Export Excel (bắt buộc có khoảng ngày) -->
+        <a-tooltip :title="exportTooltip">
+          <span>
+            <a-button :loading="exporting" :disabled="!exportFilterOk || exporting" @click="exportExcel">
+              Xuất Excel
+            </a-button>
+          </span>
+        </a-tooltip>
+
         <a-button :loading="savingAll" @click="saveAllCalcs">Lưu tính tất cả</a-button>
         <a-button type="primary" @click="openCreate">Thêm năng suất</a-button>
       </a-space>
     </div>
 
-    <ProductivityFilter
-      v-model="filters"
-      :workshops="workshops"
-      :teams="teams"
-      @search="applyFilters"
-    />
+    <ProductivityFilter v-model="filters" :workshops="workshops" :teams="teams" @search="applyFilters" />
 
-    <ProductivityTable
-      :data-source="pagedData"
-      :pagination="pagination"
-      :layout-map="layoutRatioMap"
-      @change="onTableChange"
-      @edit="openEdit"
-      @delete="onDelete"
-      @save-one="saveOneCalcs"
-      :can-edit="canEdit"
-      :can-delete="canDelete"
-      :is-admin="isAdmin"
-    />
+    <ProductivityTable :data-source="pagedData" :pagination="pagination" :layout-map="layoutRatioMap"
+      @change="onTableChange" @edit="openEdit" @delete="onDelete" @save-one="saveOneCalcs" :can-edit="canEdit"
+      :can-delete="canDelete" :is-admin="isAdmin" />
 
     <!-- Panel HỢP NHẤT: thiếu hệ số chuẩn / thiếu hệ số layout -->
-    <ProductivityIssuesPanel
-      :std-missing-list="stdMissingList"
-      :layout-issue-list="layoutIssueList"
-    />
+    <ProductivityIssuesPanel :std-missing-list="stdMissingList" :layout-issue-list="layoutIssueList" />
 
-    <ProductivityModal
-      v-model:visible="modalVisible"
-      :workshops="workshops"
-      :teams="teams"
-      :initial="editing"
-      @submit="handleSubmit"
-      @cancel="() => (modalVisible = false)"
-      :created-by-name="user.value?.name"
-    />
+    <ProductivityModal v-model:visible="modalVisible" :workshops="workshops" :teams="teams" :initial="editing"
+      @submit="handleSubmit" @cancel="() => (modalVisible = false)" :created-by-name="user.value?.name" />
 
-    <ImportExcelModal
-      v-model:visible="importVisible"
-      @done="onImported"
-      @cancel="() => (importVisible = false)"
-    />
+    <ImportExcelModal v-model:visible="importVisible" @done="onImported" @cancel="() => (importVisible = false)" />
   </div>
 </template>
 
@@ -211,7 +193,7 @@ const filtered = computed(() => {
   if (Array.isArray(r.dateRange) && r.dateRange.length === 2) {
     const [fromStr, toStr] = r.dateRange
     const fromMs = fromStr ? dayjs(fromStr).startOf('day').valueOf() : -Infinity
-    const toMs   = toStr   ? dayjs(toStr).endOf('day').valueOf()   : +Infinity
+    const toMs = toStr ? dayjs(toStr).endOf('day').valueOf() : +Infinity
     rows = rows.filter(x => {
       const t = Number(x._prod_ts)
       return Number.isFinite(t) && t >= fromMs && t <= toMs
@@ -330,6 +312,134 @@ async function saveOneCalcs(row) {
   }
 }
 
+/* ===== 🆕 Export Excel (10 cột) ===== */
+const exporting = ref(false)
+
+// Bắt buộc có khoảng ngày (từ & đến) trước khi cho xuất
+const exportFilterOk = computed(() => {
+  const r = filters.value
+  return Array.isArray(r.dateRange) && r.dateRange.length === 2 && r.dateRange[0] && r.dateRange[1]
+})
+const exportTooltip = computed(() => {
+  return exportFilterOk.value
+    ? 'Xuất toàn bộ dữ liệu đang được lọc.'
+    : 'Chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.'
+})
+
+// Cột cố định & đúng thứ tự
+const exportHeaders = [
+  'ID',
+  'Ngày',
+  'Xưởng',
+  'Tổ',
+  'Đơn hàng',
+  'Mã hàng',
+  'SL thực tế',
+  'SL theo SP chuẩn',
+  'SL theo SP Layout (hiển thị)',
+  'Người tạo',
+]
+
+function findWorkshopName(id) {
+  const w = workshops.value.find(x => Number(x.id) === Number(id))
+  return w?.name || String(id || '')
+}
+function findTeamName(id) {
+  const t = teams.value.find(x => Number(x.id) === Number(id))
+  return t?.name || String(id || '')
+}
+
+function layoutDisplay(row) {
+  const saved = Number(row?.qty_layout_output)
+  if (Number.isFinite(saved)) {
+    return saved > 0 ? Math.max(1, Math.round(saved)) : Math.round(saved)
+  }
+  const { rounded } = computeLayoutOne(row)
+  return Number.isFinite(rounded) ? rounded : null
+}
+
+function buildExportRows() {
+  const rows = filtered.value
+  return rows.map(r => {
+    const d = coerceDay(r.production_date)
+    return {
+      'ID': r.id,
+      'Ngày': d ? d.format('YYYY-MM-DD') : '',
+      'Xưởng': r?.workshop?.name || findWorkshopName(r.workshop_id),
+      'Tổ': r?.team?.name || findTeamName(r.team_id),
+      'Đơn hàng': r.order_no || '',
+      'Mã hàng': r.item_code || '',
+      'SL thực tế': Number(r.qty_actual ?? 0),
+      'SL theo SP chuẩn': Number.isFinite(Number(r.qty_standard_product))
+        ? Math.round(Number(r.qty_standard_product))
+        : null,
+      'SL theo SP Layout (hiển thị)': layoutDisplay(r),
+      'Người tạo': r.created_by_name || '',
+    }
+  })
+}
+
+function fileNameFromFilters() {
+  const [fromStr, toStr] = filters.value.dateRange || []
+  const from = dayjs(fromStr).isValid() ? dayjs(fromStr).format('YYYYMMDD') : 'from'
+  const to = dayjs(toStr).isValid() ? dayjs(toStr).format('YYYYMMDD') : 'to'
+  const ws = filters.value.workshop_id ? `-W${filters.value.workshop_id}` : ''
+  const tm = filters.value.team_id ? `-T${filters.value.team_id}` : ''
+  return `Nang_suat_${from}_to_${to}${ws}${tm}.xlsx`
+}
+
+async function exportExcel() {
+  if (!exportFilterOk.value) {
+    message.warning('Vui lòng chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.')
+    return
+  }
+  const data = buildExportRows()
+  if (!data.length) {
+    message.info('Không có dữ liệu để xuất theo bộ lọc hiện tại.')
+    return
+  }
+
+  exporting.value = true
+  try {
+    // Thử dùng SheetJS nếu có
+    let XLSX
+    try { XLSX = await import('xlsx') } catch { XLSX = null }
+
+    // Dùng AOA để đảm bảo đúng thứ tự cột
+    const rowsArr = data.map(obj => exportHeaders.map(h => obj[h] ?? ''))
+    const aoa = [exportHeaders, ...rowsArr]
+
+    if (XLSX && XLSX.utils && XLSX.writeFile) {
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      XLSX.utils.book_append_sheet(wb, ws, 'Nang_suat')
+      XLSX.writeFile(wb, fileNameFromFilters())
+    } else {
+      // Fallback CSV (Excel mở OK)
+      const csvRows = aoa.map(cols => cols.map(v => {
+        const s = (v == null ? '' : String(v)).replace(/"/g, '""')
+        return /[",\n]/.test(s) ? `"${s}"` : s
+      }).join(','))
+      const csv = '\uFEFF' + csvRows.join('\n') // BOM để Excel hiểu UTF‑8
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = fileNameFromFilters().replace(/\.xlsx$/, '.csv')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+
+    message.success('Xuất file thành công.')
+  } catch (e) {
+    console.error(e)
+    message.error('Không thể xuất file. Vui lòng thử lại.')
+  } finally {
+    exporting.value = false
+  }
+}
+/* ===== /Export Excel ===== */
+
 /* ===== CRUD & Import ===== */
 const modalVisible = ref(false); const editing = ref(null)
 function openCreate() { editing.value = null; modalVisible.value = true }
@@ -423,6 +533,7 @@ onMounted(async () => {
   display: grid;
   gap: 12px;
 }
+
 .actions {
   display: flex;
   justify-content: space-between;

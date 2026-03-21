@@ -6,7 +6,7 @@
       <a-space>
         <a-button @click="openImport">Import Excel</a-button>
 
-        <!-- 🆕 Export Excel (bắt buộc có khoảng ngày) -->
+        <!-- Export Excel (bắt buộc có khoảng ngày) -->
         <a-tooltip :title="exportTooltip">
           <span>
             <a-button :loading="exporting" :disabled="!exportFilterOk || exporting" @click="exportExcel">
@@ -15,24 +15,59 @@
           </span>
         </a-tooltip>
 
-        <a-button :loading="savingAll" @click="saveAllCalcs">Lưu tính tất cả</a-button>
+        <!-- ✅ Save all: cũng nên yêu cầu khoảng ngày để tránh “quét toàn DB” -->
+        <a-tooltip :title="saveAllTooltip">
+          <span>
+            <a-button :loading="savingAll" :disabled="!saveAllEnabled || savingAll" @click="saveAllCalcs">
+              Lưu tính tất cả
+            </a-button>
+          </span>
+        </a-tooltip>
+
         <a-button type="primary" @click="openCreate">Thêm năng suất</a-button>
       </a-space>
     </div>
 
-    <ProductivityFilter v-model="filters" :workshops="workshops" :teams="teams" @search="applyFilters" />
+    <ProductivityFilter
+      v-model="filters"
+      :workshops="workshops"
+      :teams="teams"
+      @search="applyFilters"
+    />
 
-    <ProductivityTable :data-source="pagedData" :pagination="pagination" :layout-map="layoutRatioMap"
-      @change="onTableChange" @edit="openEdit" @delete="onDelete" @save-one="saveOneCalcs" :can-edit="canEdit"
-      :can-delete="canDelete" :is-admin="isAdmin" />
+    <ProductivityTable
+      :data-source="pagedData"
+      :pagination="pagination"
+      :layout-map="layoutRatioMap"
+      @change="onTableChange"
+      @edit="openEdit"
+      @delete="onDelete"
+      @save-one="saveOneCalcs"
+      :can-edit="canEdit"
+      :can-delete="canDelete"
+      :is-admin="isAdmin"
+    />
 
-    <!-- Panel HỢP NHẤT: thiếu hệ số chuẩn / thiếu hệ số layout -->
-    <ProductivityIssuesPanel :std-missing-list="stdMissingList" :layout-issue-list="layoutIssueList" />
+    <ProductivityIssuesPanel
+      :std-missing-list="stdMissingList"
+      :layout-issue-list="layoutIssueList"
+    />
 
-    <ProductivityModal v-model:visible="modalVisible" :workshops="workshops" :teams="teams" :initial="editing"
-      @submit="handleSubmit" @cancel="() => (modalVisible = false)" :created-by-name="user.value?.name" />
+    <ProductivityModal
+      v-model:visible="modalVisible"
+      :workshops="workshops"
+      :teams="teams"
+      :initial="editing"
+      @submit="handleSubmit"
+      @cancel="() => (modalVisible = false)"
+      :created-by-name="user.value?.name"
+    />
 
-    <ImportExcelModal v-model:visible="importVisible" @done="onImported" @cancel="() => (importVisible = false)" />
+    <ImportExcelModal
+      v-model:visible="importVisible"
+      @done="onImported"
+      @cancel="() => (importVisible = false)"
+    />
   </div>
 </template>
 
@@ -71,10 +106,6 @@ const toCode = (s) => String(s || '').trim().toUpperCase()
 const toLayoutKey = (s) => toCode(s).substring(0, 11)
 const toIntOrNull = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v)) : null
 
-/** Parse "mọi kiểu ngày" về dayjs (ưu tiên ISO),
- *  fallback: lấy 10 ký tự đầu, đổi '/' -> '-' rồi parse
- *  Trả về: dayjs hoặc null nếu không hợp lệ
- */
 function coerceDay(val) {
   const d1 = dayjs(val)
   if (d1.isValid()) return d1
@@ -139,17 +170,66 @@ async function fetchLayoutRatios() {
   }
 }
 
+/* ===== Filters + pagination ===== */
+const filters = ref({ dateRange: [], workshop_id: null, team_id: null, order_no: '', item_code: '' })
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '50', '100']
+})
+
+const exportFilterOk = computed(() => {
+  const r = filters.value
+  return Array.isArray(r.dateRange) && r.dateRange.length === 2 && r.dateRange[0] && r.dateRange[1]
+})
+const exportTooltip = computed(() => {
+  return exportFilterOk.value
+    ? 'Xuất toàn bộ dữ liệu đang được lọc.'
+    : 'Chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.'
+})
+
+/* ✅ Save all cũng bắt buộc có khoảng ngày để không load/save toàn DB */
+const saveAllEnabled = computed(() => exportFilterOk.value)
+const saveAllTooltip = computed(() => {
+  return saveAllEnabled.value
+    ? 'Tính & lưu cho toàn bộ dữ liệu theo bộ lọc hiện tại (chạy theo lô).'
+    : 'Chọn khoảng ngày (từ ngày & đến ngày) trước khi “Lưu tính tất cả”.'
+})
+
 /* ===== Danh sách năng suất ===== */
 const allRows = ref([])
+
+function buildQueryParamsFromFilters() {
+  const r = filters.value
+  const params = {}
+
+  if (Array.isArray(r.dateRange) && r.dateRange.length === 2) {
+    const [fromStr, toStr] = r.dateRange
+    if (fromStr) params.date_from = dayjs(fromStr).format('YYYY-MM-DD')
+    if (toStr) params.date_to = dayjs(toStr).format('YYYY-MM-DD')
+  }
+  if (r.workshop_id) params.workshop_id = r.workshop_id
+  if (r.team_id) params.team_id = r.team_id
+  if (r.order_no?.trim()) params.order_no = r.order_no.trim()
+  if (r.item_code?.trim()) params.item_code = r.item_code.trim()
+
+  // chống cache
+  params._ts = Date.now()
+  return params
+}
+
 async function fetchEntries() {
   try {
-    const list = await productivityEntryApi.listAll()
+    const params = buildQueryParamsFromFilters()
+    const list = await productivityEntryApi.listAll(params)
+
     const mapped = (Array.isArray(list) ? list : []).map(row => {
       const qty = Number(row.qty_actual ?? 0)
       const coe = stdCoeffMap.value.get(toCode(row.item_code))
       const qtyStandard = (coe != null && Number.isFinite(coe)) ? qty * coe : null
 
-      // Chuẩn hoá mốc thời gian để lọc/sort ổn định
       const d = coerceDay(row.production_date)
       const ts = d ? d.valueOf() : NaN
 
@@ -157,11 +237,10 @@ async function fetchEntries() {
         ...row,
         _std_coefficient: coe ?? null,
         qty_standard_product: qtyStandard,
-        _prod_ts: ts, // timestamp dùng cho sort & lọc
+        _prod_ts: ts,
       }
     })
 
-    // Sort mới: ngày (desc) rồi id (desc)
     mapped.sort((a, b) => {
       const diff = (b._prod_ts || 0) - (a._prod_ts || 0)
       return diff !== 0 ? diff : (b.id - a.id)
@@ -175,21 +254,11 @@ async function fetchEntries() {
   }
 }
 
-/* ===== Bộ lọc + phân trang ===== */
-const filters = ref({ dateRange: [], workshop_id: null, team_id: null, order_no: '', item_code: '' })
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  pageSizeOptions: ['10', '20', '50', '100']
-})
-
+/* ===== Client-side filter vẫn giữ (nhưng giờ data đã nhẹ hơn do BE filter) ===== */
 const filtered = computed(() => {
   const r = filters.value
   let rows = allRows.value
 
-  // Lọc theo khoảng ngày (so sánh theo mili-giây)
   if (Array.isArray(r.dateRange) && r.dateRange.length === 2) {
     const [fromStr, toStr] = r.dateRange
     const fromMs = fromStr ? dayjs(fromStr).startOf('day').valueOf() : -Infinity
@@ -219,13 +288,17 @@ const pagedData = computed(() => {
   return filtered.value.slice(s, s + pagination.pageSize)
 })
 
-function applyFilters() { pagination.current = 1 }
+async function applyFilters() {
+  pagination.current = 1
+  await fetchEntries() // ✅ tải lại theo filter để nhẹ
+}
+
 function onTableChange(p) {
   pagination.current = Number(p.current || 1)
   pagination.pageSize = Number(p.pageSize || pagination.pageSize)
 }
 
-/* ===== Tính layout cho lưu ===== */
+/* ===== Tính layout ===== */
 function computeLayoutOne(row) {
   const codeRaw = row?.item_code
   const key11 = toLayoutKey(codeRaw)
@@ -241,7 +314,6 @@ function computeLayoutOne(row) {
     reason = `Giá trị Hệ số layout không hợp lệ cho mã: ${key11}`
   } else {
     const product = Number(ratio) * qty
-    // Rule: >0 thì tối thiểu 1
     rounded = Number.isFinite(product)
       ? (product > 0 ? Math.max(1, Math.round(product)) : Math.round(product))
       : null
@@ -249,16 +321,28 @@ function computeLayoutOne(row) {
   return { rounded, ratio, reason, key11 }
 }
 
-/* ===== Lưu TẤT CẢ ===== */
+/* ===== Lưu TẤT CẢ (chia lô) ===== */
 const savingAll = ref(false)
+const BATCH_SIZE = 300
+
 async function saveAllCalcs() {
+  if (!saveAllEnabled.value) {
+    message.warning('Chọn khoảng ngày (từ ngày & đến ngày) trước khi “Lưu tính tất cả”.')
+    return
+  }
+
   try {
     savingAll.value = true
-    const rows = allRows.value.map(r => {
+
+    // ✅ Lưu theo bộ lọc hiện tại (không đụng toàn DB)
+    const baseRows = filtered.value
+
+    const rows = baseRows.map(r => {
       const qty = Number(r?.qty_actual ?? 0)
       const coe = Number(r?._std_coefficient ?? null)
       const stdQty = Number.isFinite(coe) ? qty * coe : null
       const { rounded, reason, key11 } = computeLayoutOne(r)
+
       return {
         id: r.id,
         qty_standard_product: toIntOrNull(stdQty),
@@ -278,18 +362,31 @@ async function saveAllCalcs() {
       .filter(x => x.qty_standard_product != null || x.qty_layout_output != null)
       .map(({ __reason, __key11, ...rest }) => rest)
 
-    if (!compact.length) { message.info('Không có dữ liệu để lưu'); return }
-
-    const size = 200
-    for (let i = 0; i < compact.length; i += size) {
-      await productivityEntryApi.saveCalcsBulk(compact.slice(i, i + size))
+    if (!compact.length) {
+      message.info('Không có dữ liệu để lưu')
+      return
     }
-    message.success(`Đã tính & lưu cho ${compact.length} bản ghi.`)
+
+    // ✅ CHIA LÔ: vẫn lưu FULL, chỉ là nhiều request
+    const msgKey = 'saveAllProgress'
+    message.loading({ content: `Đang lưu 0/${compact.length}...`, key: msgKey, duration: 0 })
+
+    await productivityEntryApi.saveCalcsBulkChunked(compact, BATCH_SIZE, ({ done, total, batchIndex, batchTotal }) => {
+      message.loading({
+        content: `Đang lưu ${done}/${total} (lô ${batchIndex}/${batchTotal})...`,
+        key: msgKey,
+        duration: 0
+      })
+    })
+
+    message.success({ content: `Đã tính & lưu cho ${compact.length} bản ghi.`, key: msgKey })
     await fetchEntries()
   } catch (e) {
     console.error(e)
     message.error(e?.response?.data?.message || e?.message || 'Lỗi khi tính & lưu tất cả')
-  } finally { savingAll.value = false }
+  } finally {
+    savingAll.value = false
+  }
 }
 
 /* ===== Lưu 1 dòng ===== */
@@ -312,32 +409,12 @@ async function saveOneCalcs(row) {
   }
 }
 
-/* ===== 🆕 Export Excel (10 cột) ===== */
+/* ===== Export Excel giữ nguyên (không đổi) ===== */
 const exporting = ref(false)
 
-// Bắt buộc có khoảng ngày (từ & đến) trước khi cho xuất
-const exportFilterOk = computed(() => {
-  const r = filters.value
-  return Array.isArray(r.dateRange) && r.dateRange.length === 2 && r.dateRange[0] && r.dateRange[1]
-})
-const exportTooltip = computed(() => {
-  return exportFilterOk.value
-    ? 'Xuất toàn bộ dữ liệu đang được lọc.'
-    : 'Chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.'
-})
-
-// Cột cố định & đúng thứ tự
 const exportHeaders = [
-  'ID',
-  'Ngày',
-  'Xưởng',
-  'Tổ',
-  'Đơn hàng',
-  'Mã hàng',
-  'SL thực tế',
-  'SL theo SP chuẩn',
-  'SL theo SP Layout (hiển thị)',
-  'Người tạo',
+  'ID','Ngày','Xưởng','Tổ','Đơn hàng','Mã hàng',
+  'SL thực tế','SL theo SP chuẩn','SL theo SP Layout (hiển thị)','Người tạo',
 ]
 
 function findWorkshopName(id) {
@@ -351,9 +428,7 @@ function findTeamName(id) {
 
 function layoutDisplay(row) {
   const saved = Number(row?.qty_layout_output)
-  if (Number.isFinite(saved)) {
-    return saved > 0 ? Math.max(1, Math.round(saved)) : Math.round(saved)
-  }
+  if (Number.isFinite(saved)) return saved > 0 ? Math.max(1, Math.round(saved)) : Math.round(saved)
   const { rounded } = computeLayoutOne(row)
   return Number.isFinite(rounded) ? rounded : null
 }
@@ -370,9 +445,7 @@ function buildExportRows() {
       'Đơn hàng': r.order_no || '',
       'Mã hàng': r.item_code || '',
       'SL thực tế': Number(r.qty_actual ?? 0),
-      'SL theo SP chuẩn': Number.isFinite(Number(r.qty_standard_product))
-        ? Math.round(Number(r.qty_standard_product))
-        : null,
+      'SL theo SP chuẩn': Number.isFinite(Number(r.qty_standard_product)) ? Math.round(Number(r.qty_standard_product)) : null,
       'SL theo SP Layout (hiển thị)': layoutDisplay(r),
       'Người tạo': r.created_by_name || '',
     }
@@ -401,11 +474,9 @@ async function exportExcel() {
 
   exporting.value = true
   try {
-    // Thử dùng SheetJS nếu có
     let XLSX
     try { XLSX = await import('xlsx') } catch { XLSX = null }
 
-    // Dùng AOA để đảm bảo đúng thứ tự cột
     const rowsArr = data.map(obj => exportHeaders.map(h => obj[h] ?? ''))
     const aoa = [exportHeaders, ...rowsArr]
 
@@ -415,12 +486,11 @@ async function exportExcel() {
       XLSX.utils.book_append_sheet(wb, ws, 'Nang_suat')
       XLSX.writeFile(wb, fileNameFromFilters())
     } else {
-      // Fallback CSV (Excel mở OK)
       const csvRows = aoa.map(cols => cols.map(v => {
         const s = (v == null ? '' : String(v)).replace(/"/g, '""')
         return /[",\n]/.test(s) ? `"${s}"` : s
       }).join(','))
-      const csv = '\uFEFF' + csvRows.join('\n') // BOM để Excel hiểu UTF‑8
+      const csv = '\uFEFF' + csvRows.join('\n')
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
@@ -438,15 +508,20 @@ async function exportExcel() {
     exporting.value = false
   }
 }
-/* ===== /Export Excel ===== */
 
 /* ===== CRUD & Import ===== */
 const modalVisible = ref(false); const editing = ref(null)
 function openCreate() { editing.value = null; modalVisible.value = true }
 function openEdit(r) { editing.value = { ...r }; modalVisible.value = true }
+
 const importVisible = ref(false)
 function openImport() { importVisible.value = true }
-async function onImported() { importVisible.value = false; await fetchEntries(); message.success('Đã cập nhật danh sách sau khi import') }
+async function onImported() {
+  importVisible.value = false
+  await fetchEntries()
+  message.success('Đã cập nhật danh sách sau khi import')
+}
+
 async function onDelete(id) {
   try {
     await productivityEntryApi.remove(id)
@@ -457,6 +532,7 @@ async function onDelete(id) {
     message.error(e?.response?.data?.message || e?.message || 'Không xoá được bản ghi')
   }
 }
+
 async function handleSubmit(payload) {
   const finalPayload = {
     production_date: payload.production_date ? dayjs(payload.production_date).format('YYYY-MM-DD') : null,
@@ -465,7 +541,7 @@ async function handleSubmit(payload) {
     order_no: payload.order_no || '',
     item_code: payload.item_code || '',
     qty_actual: Number(payload.qty_actual ?? 0),
-    created_by_name: user.value?.name, // 🆕 thêm dòng này
+    created_by_name: user.value?.name,
   }
   if (!finalPayload.production_date || !finalPayload.workshop_id || !finalPayload.team_id) {
     message.error('Thiếu thông tin bắt buộc: Ngày, Xưởng hoặc Tổ!')
@@ -491,7 +567,7 @@ async function handleSubmit(payload) {
   }
 }
 
-/* ===== DỮ LIỆU CHO PANEL THIẾU (reactive) ===== */
+/* ===== Panel thiếu hệ số ===== */
 const stdMissingList = computed(() =>
   filtered.value
     .filter(r => !Number.isFinite(Number(r?._std_coefficient)))
@@ -521,8 +597,16 @@ const layoutIssueList = computed(() => {
   }).filter(x => x.layout_ratio == null || x.reason === 'SL theo SP Layout = 0')
 })
 
-/* ===== Khởi động ===== */
+/* ===== Init ===== */
 onMounted(async () => {
+  // ✅ set mặc định khoảng ngày = tháng hiện tại (tránh load toàn DB khi user quên chọn)
+  if (!exportFilterOk.value) {
+    filters.value.dateRange = [
+      dayjs().startOf('month').format('YYYY-MM-DD'),
+      dayjs().endOf('month').format('YYYY-MM-DD'),
+    ]
+  }
+
   await Promise.all([fetchMaster(), fetchStdCoefficients(), fetchLayoutRatios()])
   await fetchEntries()
 })
@@ -533,7 +617,6 @@ onMounted(async () => {
   display: grid;
   gap: 12px;
 }
-
 .actions {
   display: flex;
   justify-content: space-between;

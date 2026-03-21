@@ -5,6 +5,8 @@ const allowedForS = new Set(["S1", "S2", "S3", "S4", "S5", "S6"]);
 const allowedForL = new Set(["L2", "L3", "L4", "L5"]);
 const allowedForB = new Set(["B2", "B3", "B4", "B5"]);
 const allowedForX = new Set(["X1", "X2", "X3", "X4", "X5", "X6"]);
+// ✅ Nhóm F chỉ có F1
+const allowedForF = new Set(["F1"]);
 
 export function validateItemCodeRule(itemCode) {
   const errors = [];
@@ -17,12 +19,10 @@ export function validateItemCodeRule(itemCode) {
   }
 
   // Ký tự thứ 10 (index 9)
-  const group = s[9]; // '0' | 'S' | 'L' | 'B' | 'X'
-  if (!["0", "S", "L", "B", "X"].includes(group)) {
+  const group = s[9]; // '0' | 'S' | 'L' | 'B' | 'X' | 'F'
+  if (!["0", "S", "L", "B", "X", "F"].includes(group)) {
     errors.push(
-      `Ký tự thứ 10 phải là một trong: 0 / S / L / B / X (hiện tại: "${
-        group || ""
-      }").`
+      `Ký tự thứ 10 phải là một trong: 0 / S / L / B / X / F (hiện tại: "${group || ""}").`
     );
     return { ok: false, rule: null, group, errors };
   }
@@ -31,17 +31,17 @@ export function validateItemCodeRule(itemCode) {
 
   if (group === "0") {
     // ✅ chỉ cần 1 chữ số ngay sau '0' (pos11, index 10) và phải trong [1..6]
-    const digit = s[10]; // một ký tự
+    const digit = s[10];
     if (!/^[1-6]$/.test(digit || "")) {
       errors.push(
         `Sau ký tự "0" phải là 1 chữ số trong [1..6] (ví dụ "01","02",...,"06").`
       );
     } else {
-      ruleToken = "0" + digit; // normalize thành "01".."06" để dùng downstream
+      ruleToken = "0" + digit;
     }
   } else {
     // Nhóm chữ: token = group + 1 chữ số, nằm tại pos10-11 (index 9..10)
-    const token = s.slice(9, 11); // "S1","L3","B5","X2",...
+    const token = s.slice(9, 11);
     if (!token || token[0] !== group) {
       errors.push(`Không đọc được rule cho nhóm "${group}" tại vị trí 11.`);
     } else {
@@ -50,9 +50,12 @@ export function validateItemCodeRule(itemCode) {
         L: allowedForL,
         B: allowedForB,
         X: allowedForX,
+        F: allowedForF, // ✅ thêm F
       };
       const set = sets[group];
-      if (!/^[SLBX][0-9]$/.test(token)) {
+
+      // ✅ regex có thêm F
+      if (!/^[SLBXF][0-9]$/.test(token)) {
         errors.push(`Rule không hợp lệ. Định dạng phải là ${group}<số>.`);
       } else if (!set.has(token)) {
         switch (group) {
@@ -72,6 +75,9 @@ export function validateItemCodeRule(itemCode) {
           case "X":
             errors.push(`Không hợp lệ: "${token}". Chỉ cho phép: X1..X6.`);
             break;
+          case "F":
+            errors.push(`Không hợp lệ: "${token}". Chỉ cho phép: F1.`);
+            break;
         }
       } else {
         ruleToken = token;
@@ -82,7 +88,7 @@ export function validateItemCodeRule(itemCode) {
   return {
     ok: errors.length === 0,
     group,
-    rule: ruleToken, // '01'..'06' (nhóm '0') hoặc 'S1'..'X6'
+    rule: ruleToken,
     errors,
   };
 }

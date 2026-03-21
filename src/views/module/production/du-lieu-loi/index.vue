@@ -9,7 +9,9 @@
         </a-space>
 
         <!-- Filter -->
-        <DateErrorFilter v-model="filters" @search="onSearch" @reset="onReset" />
+        <a-card size="small" style="margin-bottom: 16px; padding: 0 12px;">
+            <DateErrorFilter v-model="filters" @search="onSearch" @reset="onReset" />
+        </a-card>
 
         <!-- Table -->
         <DateErrorTable :key="tableKey" :rows="pagedRows" :total="filteredRows.length" :page="page"
@@ -20,7 +22,7 @@
         <DateErrorModal v-model:visible="showCreate" :record="editing" @saved="afterSaveOne" />
 
         <!-- Modal import -->
-       
+
         <ImportExcelModal v-model:visible="showImport" @done="afterImport" @import="onImportErrors" />
     </section>
 </template>

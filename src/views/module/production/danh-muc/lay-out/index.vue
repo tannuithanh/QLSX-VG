@@ -17,12 +17,12 @@
             @cancel="() => (modalOpen = false)" />
 
         <GeneratePreviewModal v-model:visible="previewOpen" :data="previewData" :applying="applyLoading"
-            @apply="applyPreview" @cancel="() => (previewOpen = false)" />
+            @apply="applyPreview" @cancel="(() => (previewOpen = false))" />
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, h } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import LayoutCoeffFilter from './components/LayoutCoeffFilter.vue'
 import LayoutCoeffTable from './components/LayoutCoeffTable.vue'
@@ -48,6 +48,7 @@ const canDelete = computed(() => can('HSL-DELETE'))
 const allRows = ref([])
 const filters = ref({ keyword: '' })
 const globalStandardArea = ref(null)
+
 const previewOpen = ref(false)
 const previewData = ref({ to_create: [], to_update: [], errors: [] })
 const previewLoading = ref(false)
@@ -84,7 +85,6 @@ async function applyPreview() {
         applyLoading.value = false
     }
 }
-
 
 const pagination = reactive({
     current: 1,
@@ -160,28 +160,50 @@ function openEdit(r) {
 
 async function onSubmit(payload) {
     try {
-        const toIntOrNull = v =>
-            v === null || v === '' || Number.isNaN(Number(v)) ? null : parseInt(v, 10)
-
-        const toDec4OrNull = v =>
-            v === null || v === '' || Number.isNaN(Number(v)) ? null : Number.parseFloat(Number(v).toFixed(4))
-
-        const body = {
-            item_code: String(payload.item_code || '').trim(),
-            L: toIntOrNull(payload.L),
-            W: toIntOrNull(payload.W),
-            H: toIntOrNull(payload.H),
-            coefficient: toDec4OrNull(payload.coefficient),
-            ...(payload.layout_ratio !== undefined ? { layout_ratio: toDec4OrNull(payload.layout_ratio) } : {}),
+        const toNum3OrNull = v => {
+            const s = String(v ?? '').trim()
+            if (s === '' || Number.isNaN(Number(s))) return null
+            return Number.parseFloat(Number(s).toFixed(3)) // mm: tối đa 3 số lẻ
         }
 
-        if (!body.item_code) {
+        const toDec4OrNull = v => {
+            const s = String(v ?? '').trim()
+            return s === '' || Number.isNaN(Number(s))
+                ? null
+                : Number.parseFloat(Number(s).toFixed(4))
+        }
+
+        const code = String(payload.item_code || '').trim().toUpperCase()
+        const allowDims = (code[9] === '0') || (code.slice(9, 11) === 'S1') // 1-based: ký tự thứ 10
+
+        if (!code) {
             message.error('Vui lòng nhập mã hàng')
             return
         }
-        if ([body.L, body.W, body.H, body.coefficient].some(v => v === null)) {
-            message.error('Vui lòng nhập đủ L, W, H, hệ số (dạng số)')
-            return
+
+        let body = { item_code: code }
+
+        if (allowDims) {
+            const L = toNum3OrNull(payload.L)
+            const W = toNum3OrNull(payload.W)
+            const H = toNum3OrNull(payload.H)
+            if ([L, W, H].some(v => v === null)) {
+                message.error('Vui lòng nhập đủ L, W, H (số thập phân, mm)')
+                return
+            }
+            body = { ...body, l: L, w: W, h: H } // 👈 gửi l/w/h
+        } else {
+            const coefficient = toDec4OrNull(payload.coefficient)
+            if (coefficient === null) {
+                message.error('Vui lòng nhập hệ số (dạng số, tối đa 4 số thập phân)')
+                return
+            }
+            body = { ...body, coefficient }
+        }
+
+        if (payload.layout_ratio !== undefined) {
+            const layout_ratio = toDec4OrNull(payload.layout_ratio)
+            if (layout_ratio !== null) body.layout_ratio = layout_ratio
         }
 
         if (editing.value?.id) {
@@ -206,6 +228,7 @@ async function onSubmit(payload) {
         message.error(msg)
     }
 }
+
 async function onDelete(id) {
     try {
         await layoutCoefficientApi.remove(id)
@@ -237,13 +260,13 @@ async function recalculate() {
 }
 
 // ===== ✅ NÚT TÍNH DIỆN TÍCH SẢN PHẨM CHUẨN (ghi vào coefficient) =====
-// coefficient = FLOOR((L * W) / 10000), không đụng layout_ratio
+// BE đã ROUND(..., 4)
 const calcCoeffLoading = ref(false)
 async function calcCoefficient() {
     try {
         calcCoeffLoading.value = true
         await layoutCoefficientApi.calcCoefficient()
-        message.success('Đã tính Diện tích sản phẩm chuẩn (m²) = FLOOR(L×W/10000)')
+        message.success('Đã tính Diện tích sản phẩm chuẩn (m²) = ROUND(L×W/10000, 4)')
         await fetchAll()
     } catch (e) {
         console.error(e)

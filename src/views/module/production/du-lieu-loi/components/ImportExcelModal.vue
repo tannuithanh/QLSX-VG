@@ -444,44 +444,64 @@ async function precheckAll() {
     if (!maxDate || d > maxDate) maxDate = d
   }
 
-  const existing = await buildExistingPEIndexByCode(minDate, maxDate)
+  // 🔸 BỎ KIỂM TRA DỮ LIỆU NĂNG SUẤT — COMMENT LẠI
+  // const existing = await buildExistingPEIndexByCode(minDate, maxDate)
+
   const errs = []
 
   for (const r of payload.value) {
     const ws = findWorkshop(r.workshop)
-    if (!ws) { errs.push({ row: r.__stt, errors: [`Không tìm thấy Xưởng "${r.workshop}" trong hệ thống.`] }); continue }
-    const team = findTeam(r.team, ws.id)
-    if (!team) { errs.push({ row: r.__stt, errors: [`Không tìm thấy Tổ/nhóm "${r.team}" thuộc Xưởng ${fmtWs(ws)}.`] }); continue }
-
-    const key = `${r.production_date}__${codeKey(ws.code)}__${codeKey(team.code)}__${textKey(r.order_no)}__${textKey(r.item_code)}`
-    if (!existing.has(key)) {
-      errs.push({
-        row: r.__stt,
-        errors: [
-          'Không trùng với dữ liệu năng suất đã có.',
-          `Ngày: ${dayjs(r.production_date).format('DD/MM/YYYY')}`,
-          `Xưởng: ${fmtWs(ws)}`,
-          `Tổ/nhóm: ${fmtTeam(team)}`,
-          `Đơn hàng: ${r.order_no}`,
-          `Mã hàng: ${r.item_code}`,
-        ],
-      })
+    if (!ws) {
+      errs.push({ row: r.__stt, errors: [`Không tìm thấy Xưởng "${r.workshop}" trong hệ thống.`] })
+      continue
     }
 
-    // Kiểm tra mã lỗi/công đoạn nếu có
+    const team = findTeam(r.team, ws.id)
+    if (!team) {
+      errs.push({ row: r.__stt, errors: [`Không tìm thấy Tổ/nhóm "${r.team}" thuộc Xưởng ${fmtWs(ws)}.`] })
+      continue
+    }
+
+    // 🔸 BỎ KIỂM TRA KEY NĂNG SUẤT
+    // const key = `${r.production_date}__${codeKey(ws.code)}__${codeKey(team.code)}__${textKey(r.order_no)}__${textKey(r.item_code)}`
+    // if (!existing.has(key)) {
+    //   errs.push({
+    //     row: r.__stt,
+    //     errors: [
+    //       'Không trùng với dữ liệu năng suất đã có.',
+    //       `Ngày: ${dayjs(r.production_date).format('DD/MM/YYYY')}`,
+    //       `Xưởng: ${fmtWs(ws)}`,
+    //       `Tổ/nhóm: ${fmtTeam(team)}`,
+    //       `Đơn hàng: ${r.order_no}`,
+    //       `Mã hàng: ${r.item_code}`,
+    //     ],
+    //   })
+    // }
+
+    // 🔹 Kiểm tra mã lỗi / công đoạn (vẫn giữ)
     const bad = []
-    const { defect1_code: m1, defect1_stage: s1, defect2_code: m2, defect2_stage: s2, defect3_code: m3, defect3_stage: s3 } = r
+    const {
+      defect1_code: m1,
+      defect1_stage: s1,
+      defect2_code: m2,
+      defect2_stage: s2,
+      defect3_code: m3,
+      defect3_stage: s3
+    } = r
+
     if (m1 && !errorCodeSet.value.has(codeKey(m1))) bad.push(`Mã lỗi 1 "${m1}" không tồn tại`)
     if (s1 && !stageCodeSet.value.has(codeKey(s1))) bad.push(`Công đoạn PS 1 "${s1}" không tồn tại`)
     if (m2 && !errorCodeSet.value.has(codeKey(m2))) bad.push(`Mã lỗi 2 "${m2}" không tồn tại`)
     if (s2 && !stageCodeSet.value.has(codeKey(s2))) bad.push(`Công đoạn PS 2 "${s2}" không tồn tại`)
     if (m3 && !errorCodeSet.value.has(codeKey(m3))) bad.push(`Mã lỗi 3 "${m3}" không tồn tại`)
     if (s3 && !stageCodeSet.value.has(codeKey(s3))) bad.push(`Công đoạn PS 3 "${s3}" không tồn tại`)
+
     if (bad.length) errs.push({ row: r.__stt, errors: bad })
   }
 
   return { ok: errs.length === 0, errors: errs }
 }
+
 
 /* ===== Build rows cho BE ===== */
 function buildRowsForPost() {

@@ -17,6 +17,9 @@
                             <strong>Khoảng ngày: </strong>
                             <span v-if="selectedRangeText">{{ selectedRangeText }}</span>
                             <span v-else>Chưa chọn</span>
+                            <span class="ml-2 text-muted">
+                                (KPI chuẩn chỉ cộng theo ngày có dữ liệu thực tế của từng tổ/xưởng)
+                            </span>
                         </div>
                     </div>
 
@@ -135,6 +138,51 @@ async function fetchProductivityEntries(params) {
     return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
 }
 
+/* ====== helper ngày có dữ liệu ====== */
+function normalizeEntryDate(entry) {
+    const raw =
+        entry?.work_date ??
+        entry?.working_date ??
+        entry?.entry_date ??
+        entry?.production_date ??
+        entry?.report_date ??
+        entry?.date ??
+        entry?.created_at ??
+        null
+
+    if (!raw) return null
+
+    const d = dayjs(raw)
+    if (!d.isValid()) return null
+
+    return d.format('YYYY-MM-DD')
+}
+
+function buildDataDaysMap(entries = []) {
+    const map = new Map()
+
+    for (const e of entries) {
+        const wid = Number(e?.workshop_id ?? 0)
+        const tid = Number(e?.team_id ?? 0)
+        if (!wid || !tid) continue
+
+        const entryDate = normalizeEntryDate(e)
+        if (!entryDate) continue
+
+        const key = `${wid}::${tid}`
+        if (!map.has(key)) {
+            map.set(key, new Set())
+        }
+        map.get(key).add(entryDate)
+    }
+
+    const out = new Map()
+    for (const [key, dateSet] of map.entries()) {
+        out.set(key, dateSet.size)
+    }
+    return out
+}
+
 /* ====== nhóm theo (workshop_id, team_id, item_code) ====== */
 function groupByWTT(entries = []) {
     const map = new Map()
@@ -214,6 +262,7 @@ const reportRows = ref([])
 /* ====== map năng suất chuẩn để chia (theo team) ====== */
 const stdDailyMap = ref(new Map())   // team_id -> std_qty (chuẩn/ngày)
 const stdLayoutMap = ref(new Map())  // team_id -> layout_std_qty (chuẩn/ngày)
+const dataDaysMap = ref(new Map())   // workshop_id::team_id -> số ngày có dữ liệu
 
 async function buildReport() {
     if (!dateFrom.value || !dateTo.value) return
@@ -237,6 +286,9 @@ async function buildReport() {
         // map chuẩn theo team (đơn vị: /ngày)
         stdDailyMap.value = new Map((stdDaily || []).map(r => [Number(r.team_id), Number(r.std_qty ?? null)]))
         stdLayoutMap.value = new Map((stdLayout || []).map(r => [Number(r.team_id), Number(r.layout_std_qty ?? null)]))
+
+        // số ngày có dữ liệu thực tế theo từng tổ/xưởng
+        dataDaysMap.value = buildDataDaysMap(entries)
 
         // nhóm + cộng từ DB
         reportRows.value = groupByWTT(entries)
@@ -312,44 +364,52 @@ const teamTotalsRows = computed(() => {
     })
 })
 
-/* ====== Hai bảng tổng: % = Tổng / (NS chuẩn * số ngày) ====== */
+/* ====== Hai bảng tổng: % = Tổng / (NS chuẩn/ngày * số ngày có dữ liệu của từng tổ/xưởng) ====== */
 const teamDailyRows = computed(() => {
-    const days = Math.max(1, numDaysInRange.value || 1)
     return teamTotalsRows.value.map(x => {
-        const nsNgay = stdDailyMap.value.get(Number(x.team_id)) ?? null    // chuẩn/ngày
+        const dataDays = dataDaysMap.value.get(`${x.workshop_id}::${x.team_id}`) ?? 0
+        const nsNgay = stdDailyMap.value.get(Number(x.team_id)) ?? null
         const total = x.total_slsp_nang_suat ?? null
-        const nsKhoang = (nsNgay != null && Number.isFinite(Number(nsNgay))) ? Number(nsNgay) * days : null
+        const nsKhoang = (nsNgay != null && Number.isFinite(Number(nsNgay)) && dataDays > 0)
+            ? Number(nsNgay) * dataDays
+            : null
         const ratioPct = (nsKhoang && total != null && Number(nsKhoang) !== 0)
             ? (Number(total) / Number(nsKhoang)) * 100
             : null
+
         return {
             workshop_id: x.workshop_id,
             workshop_name: x.workshop_name,
             team_id: x.team_id,
             team_label: x.team_name,
+            data_days: dataDays,
             tong_slsp_nang_suat: total,
-            ns_chuan_ngay: nsKhoang, // tổng chuẩn theo KHOẢNG
+            ns_chuan_ngay: nsKhoang,
             ty_le_pct: ratioPct,
         }
     })
 })
 
 const teamLayoutRows = computed(() => {
-    const days = Math.max(1, numDaysInRange.value || 1)
     return teamTotalsRows.value.map(x => {
-        const nsLayout = stdLayoutMap.value.get(Number(x.team_id)) ?? null // chuẩn/ngày
+        const dataDays = dataDaysMap.value.get(`${x.workshop_id}::${x.team_id}`) ?? 0
+        const nsLayout = stdLayoutMap.value.get(Number(x.team_id)) ?? null
         const total = x.total_slsp_layout ?? null
-        const nsKhoang = (nsLayout != null && Number.isFinite(Number(nsLayout))) ? Number(nsLayout) * days : null
+        const nsKhoang = (nsLayout != null && Number.isFinite(Number(nsLayout)) && dataDays > 0)
+            ? Number(nsLayout) * dataDays
+            : null
         const ratioPct = (nsKhoang && total != null && Number(nsKhoang) !== 0)
             ? (Number(total) / Number(nsKhoang)) * 100
             : null
+
         return {
             workshop_id: x.workshop_id,
             workshop_name: x.workshop_name,
             team_id: x.team_id,
             team_label: x.team_name,
+            data_days: dataDays,
             tong_slsp_layout: total,
-            ns_chuan_layout: nsKhoang, // tổng chuẩn theo KHOẢNG
+            ns_chuan_layout: nsKhoang,
             ty_le_pct: ratioPct,
         }
     })

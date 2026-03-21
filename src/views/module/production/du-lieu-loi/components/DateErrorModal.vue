@@ -300,7 +300,7 @@ async function checkExistsInProductivity() {
 /* Submit */
 const submitting = ref(false)
 async function onOk() {
-    if (!(await checkExistsInProductivity())) return
+
 
     const payload = {
         production_date: form.ngay_sx,          // YYYY-MM-DD

@@ -1,180 +1,235 @@
 <template>
-    <a-table class="date-error-table ant-table-striped" :data-source="rows" :columns="columns" bordered size="small"
-        :sticky="{ offsetHeader: 0 }" table-layout="fixed" :scroll="{ x: 'max-content' }" :pagination="{
-            current: page,
-            pageSize: pageSize,
-            total: total,
-            showTotal: (t) => `Tổng ${t} dòng`,
-            onChange: (p) => $emit('page-change', p)
-        }" row-key="id" />
+    <div>
+        <a-table
+            :columns="columns"
+            :data-source="rows"
+            :pagination="false"
+            :row-key="record => record.id"
+            bordered
+            size="middle"
+            :scroll="{ x: 2200 }"
+        >
+            <template #bodyCell="{ column, record, index }">
+                <template v-if="column.key === 'stt'">
+                    {{ (page - 1) * pageSize + index + 1 }}
+                </template>
+
+                <template v-else-if="column.key === 'production_date'">
+                    {{ formatDate(record.production_date) }}
+                </template>
+
+                <template v-else-if="column.key === 'workshop'">
+                    {{ formatEntity(record.workshop, record.workshop_name, record.workshop_code) }}
+                </template>
+
+                <template v-else-if="column.key === 'team'">
+                    {{ formatEntity(record.team, record.team_name, record.team_code) }}
+                </template>
+
+                <template v-else-if="column.key === 'error_stage_1'">
+                    {{ stageName(record.error_stage_1) }}
+                </template>
+
+                <template v-else-if="column.key === 'error_stage_2'">
+                    {{ stageName(record.error_stage_2) }}
+                </template>
+
+                <template v-else-if="column.key === 'error_stage_3'">
+                    {{ stageName(record.error_stage_3) }}
+                </template>
+
+                <template v-else-if="column.key === 'is_scrapped'">
+                    <a-tag v-if="record.is_scrapped" color="red">Hủy</a-tag>
+                    <span v-else></span>
+                </template>
+
+                <template v-else-if="column.key === 'actions'">
+                    <a-space>
+                        <a-button
+                            v-if="canEdit"
+                            type="link"
+                            size="small"
+                            @click="$emit('edit', record)"
+                        >
+                            Sửa
+                        </a-button>
+
+                        <a-popconfirm
+                            v-if="canDelete"
+                            title="Bạn có chắc muốn xoá dữ liệu này?"
+                            ok-text="Xoá"
+                            cancel-text="Hủy"
+                            @confirm="$emit('delete', record)"
+                        >
+                            <a-button type="link" danger size="small">Xoá</a-button>
+                        </a-popconfirm>
+                    </a-space>
+                </template>
+            </template>
+        </a-table>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:16px">
+            <a-pagination
+                :current="page"
+                :page-size="pageSize"
+                :total="total"
+                :show-size-changer="true"
+                :page-size-options="['10', '20', '50', '100']"
+                :show-total="t => `Tổng ${t} dòng`"
+                @change="handlePageChange"
+                @showSizeChange="handlePageSizeChange"
+            />
+        </div>
+    </div>
 </template>
 
 <script setup>
-import { h } from 'vue'
+import { computed } from 'vue'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
-import { Tooltip, Typography, Popconfirm } from 'ant-design-vue'
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
     total: { type: Number, default: 0 },
     page: { type: Number, default: 1 },
     pageSize: { type: Number, default: 10 },
-    canDelete: { type: Boolean, default: false }, canEdit: { type: Boolean, default: false },
-    stageNameByCode: { type: Object, default: () => ({}) }
+    stageNameByCode: { type: Object, default: () => ({}) },
+    canEdit: { type: Boolean, default: false },
+    canDelete: { type: Boolean, default: false },
 })
-const emit = defineEmits(['page-change', 'edit', 'delete'])
+
+const emit = defineEmits(['page-change', 'page-size-change', 'edit', 'delete'])
 
 const codeKey = v => String(v ?? '').trim().toUpperCase()
-const Ellip = (text) =>
-    h(
-        Tooltip,
-        { placement: 'topLeft', mouseEnterDelay: 0.2 },
-        {
-            title: () => (text ? String(text) : ''),
-            default: () =>
-                h(Typography.Text, {
-                    ellipsis: true,
-                    style: 'max-width: 100%; display:block',
-                    content: text ?? '',
-                }),
-        }
-    )
 
-const fmtDmy = (s) => {
-    const str = String(s || '')
-    const d = str.endsWith('Z') ? dayjs.utc(str) : dayjs(str)
+function stageName(code) {
+    return props.stageNameByCode?.[codeKey(code)] || code || ''
+}
+
+function formatDate(value) {
+    if (!value) return ''
+    const s = String(value)
+    const d = s.endsWith('Z') ? dayjs.utc(s).local() : dayjs(s)
     return d.isValid() ? d.format('DD/MM/YYYY') : ''
 }
-const stageName = (code) => {
-    const k = codeKey(code)
-    return props.stageNameByCode[k] || code || ''
+
+function formatEntity(entity, fallbackName, fallbackCode) {
+    const name = entity?.name || fallbackName || ''
+    const code = entity?.code || fallbackCode || ''
+    if (name && code) return `${name} (${code})`
+    return name || code || ''
 }
 
-const columns = [
-    {
-        title: 'Stt',
-        key: 'stt',
-        width: 64,
-        fixed: 'left',
-        align: 'center',
-        customRender: ({ index }) => index + 1 + (props.page - 1) * props.pageSize,
-    },
-    {
-        title: 'Ngày sản xuất', dataIndex: 'production_date', key: 'production_date', width: 124, fixed: 'left',
-        customRender: ({ text }) => fmtDmy(text),
-    },
-    {
-        title: 'Xưởng', key: 'workshop', width: 200, fixed: 'left',
-        customRender: ({ record }) => Ellip(record?.workshop ? `${record.workshop.name} (${record.workshop.code})` : '')
-    },
-    {
-        title: 'Tổ/nhóm', key: 'team', width: 200, fixed: 'left',
-        customRender: ({ record }) => Ellip(record?.team ? `${record.team.name} (${record.team.code})` : '')
-    },
+function handlePageChange(currentPage, currentPageSize) {
+    emit('page-change', currentPage)
+    if (currentPageSize && Number(currentPageSize) !== Number(props.pageSize)) {
+        emit('page-size-change', currentPageSize)
+    }
+}
 
-    { title: 'Đơn hàng', dataIndex: 'order_no', key: 'order_no', width: 180, customRender: ({ text }) => Ellip(text) },
-    { title: 'Mã hàng', dataIndex: 'item_code', key: 'item_code', width: 160, customRender: ({ text }) => Ellip(text) },
-    { title: 'SL lỗi', dataIndex: 'error_qty', key: 'error_qty', width: 84, align: 'center' },
+function handlePageSizeChange(currentPage, nextPageSize) {
+    emit('page-size-change', nextPageSize)
+    emit('page-change', 1)
+}
 
-    {
-        title: 'Lỗi 1',
-        children: [
-            { title: 'Dạng lỗi', dataIndex: 'error_type_1', key: 'error_type_1', width: 140, customRender: ({ text }) => Ellip(text) },
-            { title: 'Mã lỗi', dataIndex: 'error_code_1', key: 'error_code_1', width: 120, customRender: ({ text }) => Ellip(text) },
-            { title: 'Công đoạn PS', dataIndex: 'error_stage_1', key: 'error_stage_1', width: 160, customRender: ({ text }) => Ellip(stageName(text)) },
-        ],
-    },
-    {
-        title: 'Lỗi 2',
-        children: [
-            { title: 'Dạng lỗi', dataIndex: 'error_type_2', key: 'error_type_2', width: 140, customRender: ({ text }) => Ellip(text) },
-            { title: 'Mã lỗi', dataIndex: 'error_code_2', key: 'error_code_2', width: 120, customRender: ({ text }) => Ellip(text) },
-            { title: 'Công đoạn PS', dataIndex: 'error_stage_2', key: 'error_stage_2', width: 160, customRender: ({ text }) => Ellip(stageName(text)) },
-        ],
-    },
-    {
-        title: 'Lỗi 3',
-        children: [
-            { title: 'Dạng lỗi', dataIndex: 'error_type_3', key: 'error_type_3', width: 140, customRender: ({ text }) => Ellip(text) },
-            { title: 'Mã lỗi', dataIndex: 'error_code_3', key: 'error_code_3', width: 120, customRender: ({ text }) => Ellip(text) },
-            { title: 'Công đoạn PS', dataIndex: 'error_stage_3', key: 'error_stage_3', width: 160, customRender: ({ text }) => Ellip(stageName(text)) },
-        ],
-    },
-    {
-        title: 'Hủy',
-        dataIndex: 'is_scrapped',
-        key: 'is_scrapped',
-        width: 70,
-        align: 'center',
-        customRender: ({ text }) => (String(text) === 'true' || text === 1 ? 'Hủy' : ''),
-    },
-    {
-        title: 'Hành động',
-        key: 'actions',
-        width: 120,
-        fixed: 'right',
-        align: 'center',
-        customRender: ({ record }) => {
-            const children = []
-
-            if (props.canEdit) {
-                children.push(
-                    h(EditOutlined, {
-                        style: 'color:#faad14; cursor:pointer; margin-right:8px',
-                        onClick: () => emit('edit', record),
-                    })
-                )
-            }
-
-            if (props.canDelete) {
-                children.push(
-                    h(
-                        Popconfirm,
-                        {
-                            title: 'Xoá bản ghi này?',
-                            okText: 'Xoá',
-                            cancelText: 'Huỷ',
-                            onConfirm: () => emit('delete', record),
-                        },
-                        {
-                            default: () => h(DeleteOutlined, { style: 'color:#f5222d; cursor:pointer' }),
-                        }
-                    )
-                )
-            }
-
-            return h('span', {}, children.length ? children : '-')
+const columns = computed(() => {
+    const cols = [
+        {
+            title: 'STT',
+            key: 'stt',
+            width: 70,
+            align: 'center',
+            fixed: 'left',
         },
+        {
+            title: 'Ngày sản xuất',
+            key: 'production_date',
+            dataIndex: 'production_date',
+            width: 130,
+            fixed: 'left',
+        },
+        {
+            title: 'Xưởng',
+            key: 'workshop',
+            width: 180,
+        },
+        {
+            title: 'Tổ/nhóm',
+            key: 'team',
+            width: 180,
+        },
+        {
+            title: 'Đơn hàng',
+            dataIndex: 'order_no',
+            key: 'order_no',
+            width: 180,
+        },
+        {
+            title: 'Mã hàng',
+            dataIndex: 'item_code',
+            key: 'item_code',
+            width: 180,
+        },
+        {
+            title: 'SL lỗi',
+            dataIndex: 'error_qty',
+            key: 'error_qty',
+            width: 100,
+            align: 'right',
+        },
+        {
+            title: 'Mã lỗi 1',
+            dataIndex: 'error_code_1',
+            key: 'error_code_1',
+            width: 120,
+        },
+        {
+            title: 'Công đoạn PS 1',
+            key: 'error_stage_1',
+            width: 150,
+        },
+        {
+            title: 'Mã lỗi 2',
+            dataIndex: 'error_code_2',
+            key: 'error_code_2',
+            width: 120,
+        },
+        {
+            title: 'Công đoạn PS 2',
+            key: 'error_stage_2',
+            width: 150,
+        },
+        {
+            title: 'Mã lỗi 3',
+            dataIndex: 'error_code_3',
+            key: 'error_code_3',
+            width: 120,
+        },
+        {
+            title: 'Công đoạn PS 3',
+            key: 'error_stage_3',
+            width: 150,
+        },
+        {
+            title: 'Hủy',
+            key: 'is_scrapped',
+            width: 90,
+            align: 'center',
+        },
+    ]
 
+    if (props.canEdit || props.canDelete) {
+        cols.push({
+            title: 'Thao tác',
+            key: 'actions',
+            width: 120,
+            fixed: 'right',
+            align: 'center',
+        })
     }
 
-]
+    return cols
+})
 </script>
 
-<style scoped>
-.date-error-table :deep(.ant-table-thead > tr > th) {
-    background: #c06252 !important;
-    color: white !important;
-    font-weight: 600;
-    border-color: #eee;
-    white-space: nowrap;
-    text-align: center;
-}
-
-.date-error-table :deep(.ant-table-cell) {
-    border-color: #f0f0f0;
-    white-space: nowrap;
-}
-
-.ant-table-striped :deep(.ant-table-tbody > tr:nth-child(odd) > td) {
-    background: #fcfcfc;
-}
-
-.date-error-table :deep(.ant-table-cell-fix-left),
-.date-error-table :deep(.ant-table-cell-fix-right) {
-    background: #fff;
-}
-</style>

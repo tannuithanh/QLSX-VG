@@ -6,7 +6,6 @@
       <a-space>
         <a-button @click="openImport">Import Excel</a-button>
 
-        <!-- Export Excel (bắt buộc có khoảng ngày) -->
         <a-tooltip :title="exportTooltip">
           <span>
             <a-button :loading="exporting" :disabled="!exportFilterOk || exporting" @click="exportExcel">
@@ -15,7 +14,6 @@
           </span>
         </a-tooltip>
 
-        <!-- ✅ Save all: cũng nên yêu cầu khoảng ngày để tránh “quét toàn DB” -->
         <a-tooltip :title="saveAllTooltip">
           <span>
             <a-button :loading="savingAll" :disabled="!saveAllEnabled || savingAll" @click="saveAllCalcs">
@@ -60,7 +58,7 @@
       :initial="editing"
       @submit="handleSubmit"
       @cancel="() => (modalVisible = false)"
-      :created-by-name="user.value?.name"
+      :created-by-name="editing?.created_by_name || user.value?.name"
     />
 
     <ImportExcelModal
@@ -101,6 +99,8 @@ const canAdd = computed(() => can('DLNS-ADD'))
 const canEdit = computed(() => can('DLNS-EDIT'))
 const canDelete = computed(() => can('DLNS-DELETE'))
 
+const todayYmd = () => dayjs().format('YYYY-MM-DD')
+
 /* ===== Utils ===== */
 const toCode = (s) => String(s || '').trim().toUpperCase()
 const toLayoutKey = (s) => toCode(s).substring(0, 11)
@@ -117,7 +117,9 @@ function coerceDay(val) {
 }
 
 /* ===== Master data ===== */
-const workshops = ref([]); const teams = ref([])
+const workshops = ref([])
+const teams = ref([])
+
 async function fetchMaster() {
   try {
     const [ws, ts] = await Promise.all([
@@ -134,6 +136,7 @@ async function fetchMaster() {
 
 /* ===== Hệ số chuẩn ===== */
 const stdCoeffMap = ref(new Map())
+
 async function fetchStdCoefficients() {
   try {
     const list = await standardCoefficientApi.listAll().catch(() => [])
@@ -152,6 +155,7 @@ async function fetchStdCoefficients() {
 
 /* ===== layout_ratio (key11) ===== */
 const layoutRatioMap = ref(new Map())
+
 async function fetchLayoutRatios() {
   try {
     const list = await layoutCoefficientApi.listAll()
@@ -171,7 +175,15 @@ async function fetchLayoutRatios() {
 }
 
 /* ===== Filters + pagination ===== */
-const filters = ref({ dateRange: [], workshop_id: null, team_id: null, order_no: '', item_code: '' })
+const filters = ref({
+  dateRange: [],
+  workshop_id: null,
+  team_id: null,
+  order_no: '',
+  item_code: '',
+  created_by_name: '',
+})
+
 const pagination = reactive({
   current: 1,
   pageSize: 10,
@@ -184,14 +196,15 @@ const exportFilterOk = computed(() => {
   const r = filters.value
   return Array.isArray(r.dateRange) && r.dateRange.length === 2 && r.dateRange[0] && r.dateRange[1]
 })
+
 const exportTooltip = computed(() => {
   return exportFilterOk.value
     ? 'Xuất toàn bộ dữ liệu đang được lọc.'
     : 'Chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.'
 })
 
-/* ✅ Save all cũng bắt buộc có khoảng ngày để không load/save toàn DB */
 const saveAllEnabled = computed(() => exportFilterOk.value)
+
 const saveAllTooltip = computed(() => {
   return saveAllEnabled.value
     ? 'Tính & lưu cho toàn bộ dữ liệu theo bộ lọc hiện tại (chạy theo lô).'
@@ -210,12 +223,13 @@ function buildQueryParamsFromFilters() {
     if (fromStr) params.date_from = dayjs(fromStr).format('YYYY-MM-DD')
     if (toStr) params.date_to = dayjs(toStr).format('YYYY-MM-DD')
   }
+
   if (r.workshop_id) params.workshop_id = r.workshop_id
   if (r.team_id) params.team_id = r.team_id
   if (r.order_no?.trim()) params.order_no = r.order_no.trim()
   if (r.item_code?.trim()) params.item_code = r.item_code.trim()
+  if (r.created_by_name?.trim()) params.created_by_name = r.created_by_name.trim()
 
-  // chống cache
   params._ts = Date.now()
   return params
 }
@@ -254,7 +268,7 @@ async function fetchEntries() {
   }
 }
 
-/* ===== Client-side filter vẫn giữ (nhưng giờ data đã nhẹ hơn do BE filter) ===== */
+/* ===== Client-side filter ===== */
 const filtered = computed(() => {
   const r = filters.value
   let rows = allRows.value
@@ -271,14 +285,22 @@ const filtered = computed(() => {
 
   if (r.workshop_id) rows = rows.filter(x => Number(x.workshop_id) === Number(r.workshop_id))
   if (r.team_id) rows = rows.filter(x => Number(x.team_id) === Number(r.team_id))
+
   if (r.order_no?.trim()) {
     const q = r.order_no.trim().toLowerCase()
     rows = rows.filter(x => String(x.order_no || '').toLowerCase().includes(q))
   }
+
   if (r.item_code?.trim()) {
     const q = r.item_code.trim().toLowerCase()
     rows = rows.filter(x => String(x.item_code || '').toLowerCase().includes(q))
   }
+
+  if (r.created_by_name?.trim()) {
+    const q = r.created_by_name.trim().toLowerCase()
+    rows = rows.filter(x => String(x.created_by_name || '').toLowerCase().includes(q))
+  }
+
   return rows
 })
 
@@ -290,7 +312,7 @@ const pagedData = computed(() => {
 
 async function applyFilters() {
   pagination.current = 1
-  await fetchEntries() // ✅ tải lại theo filter để nhẹ
+  await fetchEntries()
 }
 
 function onTableChange(p) {
@@ -304,7 +326,8 @@ function computeLayoutOne(row) {
   const key11 = toLayoutKey(codeRaw)
   const qty = Number(row?.qty_actual)
   const ratio = layoutRatioMap.value.get(key11)
-  let rounded = null, reason = null
+  let rounded = null
+  let reason = null
 
   if (!Number.isFinite(qty)) {
     reason = 'Số lượng thực tế không hợp lệ'
@@ -318,10 +341,11 @@ function computeLayoutOne(row) {
       ? (product > 0 ? Math.max(1, Math.round(product)) : Math.round(product))
       : null
   }
+
   return { rounded, ratio, reason, key11 }
 }
 
-/* ===== Lưu TẤT CẢ (chia lô) ===== */
+/* ===== Lưu TẤT CẢ ===== */
 const savingAll = ref(false)
 const BATCH_SIZE = 300
 
@@ -334,7 +358,6 @@ async function saveAllCalcs() {
   try {
     savingAll.value = true
 
-    // ✅ Lưu theo bộ lọc hiện tại (không đụng toàn DB)
     const baseRows = filtered.value
 
     const rows = baseRows.map(r => {
@@ -367,7 +390,6 @@ async function saveAllCalcs() {
       return
     }
 
-    // ✅ CHIA LÔ: vẫn lưu FULL, chỉ là nhiều request
     const msgKey = 'saveAllProgress'
     message.loading({ content: `Đang lưu 0/${compact.length}...`, key: msgKey, duration: 0 })
 
@@ -397,10 +419,12 @@ async function saveOneCalcs(row) {
     const stdQty = Number.isFinite(coe) ? qty * coe : null
     const { rounded, reason, key11 } = computeLayoutOne(row)
     if (reason) message.warning(`(#${row.id}) ${reason}`)
+
     await productivityEntryApi.saveCalcs(row.id, {
       qty_standard_product: toIntOrNull(stdQty),
       qty_layout_output: rounded
     })
+
     message.success(`Đã tính & lưu cho mã hàng: ${row.item_code} (key: ${key11})`)
     await fetchEntries()
   } catch (e) {
@@ -409,18 +433,28 @@ async function saveOneCalcs(row) {
   }
 }
 
-/* ===== Export Excel giữ nguyên (không đổi) ===== */
+/* ===== Export Excel ===== */
 const exporting = ref(false)
 
 const exportHeaders = [
-  'ID','Ngày','Xưởng','Tổ','Đơn hàng','Mã hàng',
-  'SL thực tế','SL theo SP chuẩn','SL theo SP Layout (hiển thị)','Người tạo',
+  'ID',
+  'Ngày',
+  'Xưởng',
+  'Tổ',
+  'Đơn hàng',
+  'Mã hàng',
+  'SL thực tế',
+  'SL theo SP chuẩn',
+  'SL theo SP Layout (hiển thị)',
+  'Người tạo',
+  'Ngày tạo',
 ]
 
 function findWorkshopName(id) {
   const w = workshops.value.find(x => Number(x.id) === Number(id))
   return w?.name || String(id || '')
 }
+
 function findTeamName(id) {
   const t = teams.value.find(x => Number(x.id) === Number(id))
   return t?.name || String(id || '')
@@ -448,6 +482,7 @@ function buildExportRows() {
       'SL theo SP chuẩn': Number.isFinite(Number(r.qty_standard_product)) ? Math.round(Number(r.qty_standard_product)) : null,
       'SL theo SP Layout (hiển thị)': layoutDisplay(r),
       'Người tạo': r.created_by_name || '',
+      'Ngày tạo': r.created_at ? dayjs(r.created_at).format('YYYY-MM-DD HH:mm:ss') : '',
     }
   })
 }
@@ -466,6 +501,7 @@ async function exportExcel() {
     message.warning('Vui lòng chọn khoảng ngày (từ ngày & đến ngày) trước khi xuất.')
     return
   }
+
   const data = buildExportRows()
   if (!data.length) {
     message.info('Không có dữ liệu để xuất theo bộ lọc hiện tại.')
@@ -475,7 +511,11 @@ async function exportExcel() {
   exporting.value = true
   try {
     let XLSX
-    try { XLSX = await import('xlsx') } catch { XLSX = null }
+    try {
+      XLSX = await import('xlsx')
+    } catch {
+      XLSX = null
+    }
 
     const rowsArr = data.map(obj => exportHeaders.map(h => obj[h] ?? ''))
     const aoa = [exportHeaders, ...rowsArr]
@@ -490,6 +530,7 @@ async function exportExcel() {
         const s = (v == null ? '' : String(v)).replace(/"/g, '""')
         return /[",\n]/.test(s) ? `"${s}"` : s
       }).join(','))
+
       const csv = '\uFEFF' + csvRows.join('\n')
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
@@ -510,12 +551,25 @@ async function exportExcel() {
 }
 
 /* ===== CRUD & Import ===== */
-const modalVisible = ref(false); const editing = ref(null)
-function openCreate() { editing.value = null; modalVisible.value = true }
-function openEdit(r) { editing.value = { ...r }; modalVisible.value = true }
+const modalVisible = ref(false)
+const editing = ref(null)
+
+function openCreate() {
+  editing.value = null
+  modalVisible.value = true
+}
+
+function openEdit(r) {
+  editing.value = { ...r }
+  modalVisible.value = true
+}
 
 const importVisible = ref(false)
-function openImport() { importVisible.value = true }
+
+function openImport() {
+  importVisible.value = true
+}
+
 async function onImported() {
   importVisible.value = false
   await fetchEntries()
@@ -541,12 +595,19 @@ async function handleSubmit(payload) {
     order_no: payload.order_no || '',
     item_code: payload.item_code || '',
     qty_actual: Number(payload.qty_actual ?? 0),
-    created_by_name: user.value?.name,
+    created_by_name: editing.value?.created_by_name || payload.created_by_name || user.value?.name || '',
   }
+
   if (!finalPayload.production_date || !finalPayload.workshop_id || !finalPayload.team_id) {
     message.error('Thiếu thông tin bắt buộc: Ngày, Xưởng hoặc Tổ!')
     return
   }
+
+  if (finalPayload.production_date > todayYmd()) {
+    message.error('Ngày sản xuất không được lớn hơn ngày hiện tại')
+    return
+  }
+
   try {
     if (editing.value?.id) {
       await productivityEntryApi.update(editing.value.id, finalPayload)
@@ -555,6 +616,7 @@ async function handleSubmit(payload) {
       await productivityEntryApi.create(finalPayload)
       message.success('Thêm năng suất thành công!')
     }
+
     modalVisible.value = false
     await fetchEntries()
   } catch (e) {
@@ -587,6 +649,7 @@ const layoutIssueList = computed(() => {
     const reason = !Number.isFinite(ratio)
       ? 'Thiếu hệ số layout'
       : (Number.isFinite(saved) && saved === 0 ? 'SL theo SP Layout = 0' : '')
+
     return {
       item_code: r.item_code,
       layout_key11: key11,
@@ -599,7 +662,6 @@ const layoutIssueList = computed(() => {
 
 /* ===== Init ===== */
 onMounted(async () => {
-  // ✅ set mặc định khoảng ngày = tháng hiện tại (tránh load toàn DB khi user quên chọn)
   if (!exportFilterOk.value) {
     filters.value.dateRange = [
       dayjs().startOf('month').format('YYYY-MM-DD'),

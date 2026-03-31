@@ -6,9 +6,8 @@
             <a-row :gutter="12">
                 <a-col :span="8">
                     <a-form-item label="Ngày sản xuất" required>
-                        <!-- Hiển thị DD/MM/YYYY, gửi BE YYYY-MM-DD -->
                         <a-date-picker v-model:value="form.ngay_sx" format="DD/MM/YYYY" value-format="YYYY-MM-DD"
-                            style="width:100%" />
+                            :disabled-date="disabledFutureDate" style="width:100%" />
                     </a-form-item>
                 </a-col>
 
@@ -57,7 +56,6 @@
 
             <a-divider orientation="left">Lỗi phát sinh</a-divider>
 
-            <!-- Nhóm lỗi 1 -->
             <a-row :gutter="12">
                 <a-col :span="12">
                     <a-form-item label="Mã lỗi 1">
@@ -73,7 +71,6 @@
                 </a-col>
             </a-row>
 
-            <!-- Nhóm lỗi 2 -->
             <a-row :gutter="12">
                 <a-col :span="12">
                     <a-form-item label="Mã lỗi 2">
@@ -89,7 +86,6 @@
                 </a-col>
             </a-row>
 
-            <!-- Nhóm lỗi 3 -->
             <a-row :gutter="12">
                 <a-col :span="12">
                     <a-form-item label="Mã lỗi 3">
@@ -120,17 +116,13 @@
 import { computed, onMounted, reactive, watch, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-dayjs.extend(utc)
 
 import { dataErrorApi } from '@/services/production_service/dataErrorService'
-import { productivityEntryApi } from '@/services/production_service/productivityEntryService'
 import { workshopApi } from '@/services/production_service/workshopService'
 import { teamApi } from '@/services/production_service/teamService'
 import { errorCodeApi } from '@/services/production_service/errorCodeService'
 import { stageApi } from '@/services/production_service/stageService'
 
-/* Props/Emits */
 const props = defineProps({
     visible: { type: Boolean, default: false },
     record: { type: Object, default: null },
@@ -143,7 +135,6 @@ const innerVisible = computed({
 })
 const isEdit = computed(() => !!props.record)
 
-/* Lookups */
 const workshops = ref([])
 const teams = ref([])
 const errorCodes = ref([])
@@ -159,10 +150,10 @@ async function loadLookups() {
             errorCodeApi.listAll(),
             stageApi.listAll(),
         ])
-        workshops.value = ws
-        teams.value = ts
-        errorCodes.value = ecs
-        stages.value = sts
+        workshops.value = Array.isArray(ws) ? ws : []
+        teams.value = Array.isArray(ts) ? ts : []
+        errorCodes.value = Array.isArray(ecs) ? ecs : []
+        stages.value = Array.isArray(sts) ? sts : []
     } finally {
         loadingLookups.value = false
     }
@@ -171,7 +162,6 @@ async function loadLookups() {
 const errorCodeOptions = computed(() =>
     errorCodes.value.map(ec => ({ label: `${ec.name} (${ec.code})`, value: ec.code }))
 )
-// Label ưu tiên NAME để người dùng thấy tên công đoạn; vẫn lưu code cho ổn định
 const stageOptions = computed(() =>
     stages.value.map(s => ({ label: `${s.name} (${s.code})`, value: s.code }))
 )
@@ -179,138 +169,136 @@ const stageOptions = computed(() =>
 const selectFilter = (input, option) =>
     (option?.label ?? '').toLowerCase().includes((input ?? '').toLowerCase())
 
-const teamsByWorkshop = computed(() =>
-    !form.xuong_id ? [] : teams.value.filter(t => Number(t.workshop_id) === Number(form.xuong_id))
-)
+const todayYmd = () => dayjs().format('YYYY-MM-DD')
 
-/* Form */
-const today = dayjs().format('YYYY-MM-DD')
 const form = reactive({
     id: null,
-    ngay_sx: today,
+    ngay_sx: todayYmd(),
     xuong_id: null,
     to_id: null,
     don_hang: '',
     ma_hang: '',
     sl_loi: null,
-    ma_loi1: '', cong_doan_ps1: '',
-    ma_loi2: '', cong_doan_ps2: '',
-    ma_loi3: '', cong_doan_ps3: '',
+    ma_loi1: '',
+    cong_doan_ps1: '',
+    ma_loi2: '',
+    cong_doan_ps2: '',
+    ma_loi3: '',
+    cong_doan_ps3: '',
     huy: false,
 })
 
+const teamsByWorkshop = computed(() =>
+    !form.xuong_id ? [] : teams.value.filter(t => Number(t.workshop_id) === Number(form.xuong_id))
+)
+
 watch(() => props.record, (r) => {
     if (!r) return resetForm()
+
     form.id = r.id
-    // chuẩn hóa ngày từ record: nhận Date/ISO/chuỗi -> về YYYY-MM-DD
-    form.ngay_sx = r.production_date ? dayjs(r.production_date).format('YYYY-MM-DD') : today
-    form.xuong_id = r.workshop_id ?? null
-    form.to_id = r.team_id ?? null
+    form.ngay_sx = r.production_date ? dayjs(r.production_date).format('YYYY-MM-DD') : todayYmd()
+    form.xuong_id = r.workshop_id ?? r.workshop?.id ?? null
+    form.to_id = r.team_id ?? r.team?.id ?? null
     form.don_hang = r.order_no ?? ''
     form.ma_hang = r.item_code ?? ''
     form.sl_loi = r.error_qty ?? null
-
-    // giữ VALUE là code; nếu DB đang lưu tên, vẫn render được (không có trong options => để trống)
     form.ma_loi1 = r.error_code_1 ?? ''
     form.cong_doan_ps1 = r.error_stage_1 ?? ''
     form.ma_loi2 = r.error_code_2 ?? ''
     form.cong_doan_ps2 = r.error_stage_2 ?? ''
     form.ma_loi3 = r.error_code_3 ?? ''
     form.cong_doan_ps3 = r.error_stage_3 ?? ''
-
     form.huy = !!r.is_scrapped
 }, { immediate: true })
 
 function resetForm() {
     form.id = null
-    form.ngay_sx = today
+    form.ngay_sx = todayYmd()
     form.xuong_id = null
     form.to_id = null
     form.don_hang = ''
     form.ma_hang = ''
     form.sl_loi = null
-    form.ma_loi1 = form.cong_doan_ps1 = ''
-    form.ma_loi2 = form.cong_doan_ps2 = ''
-    form.ma_loi3 = form.cong_doan_ps3 = ''
+    form.ma_loi1 = ''
+    form.cong_doan_ps1 = ''
+    form.ma_loi2 = ''
+    form.cong_doan_ps2 = ''
+    form.ma_loi3 = ''
+    form.cong_doan_ps3 = ''
     form.huy = false
 }
 
 function onWorkshopChange() {
-    const t = teams.value.find(x => x.id === form.to_id)
+    const t = teams.value.find(x => Number(x.id) === Number(form.to_id))
     if (t && Number(t.workshop_id) !== Number(form.xuong_id)) {
         form.to_id = null
     }
 }
 
-/* Check trùng với bảng năng suất (ngày local, khớp workshop/team id + order + item) */
-const textKey = v => String(v ?? '').replace(/\u00A0/g, ' ').replace(/\u200B/g, '').trim()
-function makePEKey({ d, w, t, o, i }) {
-    return `${d}__${w}__${t}__${textKey(o)}__${textKey(i)}`
+function disabledFutureDate(current) {
+    return current && current.endOf('day').isAfter(dayjs().endOf('day'))
 }
-async function checkExistsInProductivity() {
-    const d = form.ngay_sx
-    const w = form.xuong_id
-    const t = form.to_id
-    const o = form.don_hang
-    const i = form.ma_hang
 
-    const errs = []
-    if (!d) errs.push('Vui lòng chọn "Ngày sản xuất".')
-    if (!w) errs.push('Vui lòng chọn "Xưởng".')
-    if (!t) errs.push('Vui lòng chọn "Tổ/nhóm".')
-    if (!o?.trim()) errs.push('Vui lòng nhập "Đơn hàng".')
-    if (!i?.trim()) errs.push('Vui lòng nhập "Mã hàng".')
-    if (form.sl_loi === null || form.sl_loi === '' || Number.isNaN(Number(form.sl_loi))) {
-        errs.push('"SL lỗi" phải là số.')
-    }
-    if (errs.length) { message.error(errs[0]); return false }
+const textKey = v => String(v ?? '').replace(/\u00A0/g, ' ').replace(/\u200B/g, '').trim()
 
-    // lấy năng suất trong ngày để giảm tải
-    const list = await productivityEntryApi.listAll({ date_from: d, date_to: d })
-    const idx = new Set(
-        list.map(r => {
-            const ymd = dayjs.utc(r.production_date).local().format('YYYY-MM-DD') // FIX lệch UTC
-            return makePEKey({
-                d: ymd,
-                w: r.workshop_id,
-                t: r.team_id,
-                o: r.order_no,
-                i: r.item_code,
-            })
-        })
-    )
-
-    const key = makePEKey({ d, w, t, o, i })
-    if (!idx.has(key)) {
-        const ws = workshops.value.find(x => Number(x.id) === Number(w))
-        const tm = teams.value.find(x => Number(x.id) === Number(t))
-        message.error([
-            'Không trùng dữ liệu năng suất đã có.',
-            `Ngày: ${dayjs(d).format('DD/MM/YYYY')}`,
-            `Xưởng: ${ws ? `${ws.name} (${ws.code})` : w}`,
-            `Tổ/nhóm: ${tm ? `${tm.name} (${tm.code})` : t}`,
-            `Đơn hàng: ${o}`,
-            `Mã hàng: ${i}`,
-        ].join('  '))
+function validateForm() {
+    if (!form.ngay_sx) {
+        message.error('Vui lòng chọn "Ngày sản xuất".')
         return false
     }
+
+    if (form.ngay_sx > todayYmd()) {
+        message.error('"Ngày sản xuất" không được lớn hơn ngày hiện tại.')
+        return false
+    }
+
+    if (!form.xuong_id) {
+        message.error('Vui lòng chọn "Xưởng".')
+        return false
+    }
+
+    if (!form.to_id) {
+        message.error('Vui lòng chọn "Tổ/nhóm".')
+        return false
+    }
+
+    if (!textKey(form.don_hang)) {
+        message.error('Vui lòng nhập "Đơn hàng".')
+        return false
+    }
+
+    if (!textKey(form.ma_hang)) {
+        message.error('Vui lòng nhập "Mã hàng".')
+        return false
+    }
+
+    if (form.sl_loi === null || form.sl_loi === '' || Number.isNaN(Number(form.sl_loi))) {
+        message.error('"SL lỗi" phải là số.')
+        return false
+    }
+
+    if (Number(form.sl_loi) < 0) {
+        message.error('"SL lỗi" không được nhỏ hơn 0.')
+        return false
+    }
+
     return true
 }
 
-/* Submit */
 const submitting = ref(false)
-async function onOk() {
 
+async function onOk() {
+    if (submitting.value) return
+    if (!validateForm()) return
 
     const payload = {
-        production_date: form.ngay_sx,          // YYYY-MM-DD
+        production_date: form.ngay_sx,
         workshop_id: form.xuong_id,
         team_id: form.to_id,
         order_no: textKey(form.don_hang),
         item_code: textKey(form.ma_hang),
         error_qty: Number(form.sl_loi),
 
-        // LƯU code; bảng hiển thị sẽ map code -> name
         error_code_1: form.ma_loi1 || null,
         error_stage_1: form.cong_doan_ps1 || null,
         error_code_2: form.ma_loi2 || null,

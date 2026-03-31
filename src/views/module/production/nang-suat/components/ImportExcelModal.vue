@@ -1,11 +1,28 @@
 <template>
-    <a-modal v-model:visible="innerVisible" title="Import Excel năng suất" ok-text="Tải lên" cancel-text="Huỷ"
-        :confirm-loading="submitting" :width="960" :mask-closable="false" destroy-on-close
-        wrap-class-name="import-clean" @ok="submit" @cancel="$emit('cancel')">
+    <a-modal
+        v-model:visible="innerVisible"
+        title="Import Excel năng suất"
+        ok-text="Tải lên"
+        cancel-text="Huỷ"
+        :confirm-loading="submitting"
+        :width="960"
+        :mask-closable="false"
+        destroy-on-close
+        wrap-class-name="import-clean"
+        @ok="submit"
+        @cancel="$emit('cancel')"
+    >
         <div class="body">
-            <!-- Uploader -->
-            <a-upload-dragger name="file" :before-upload="beforeUpload" :file-list="fileList" :max-count="1"
-                accept=".xlsx,.xls,.csv" :disabled="submitting" @remove="onRemove" class="uploader">
+            <a-upload-dragger
+                name="file"
+                :before-upload="beforeUpload"
+                :file-list="fileList"
+                :max-count="1"
+                accept=".xlsx,.xls,.csv"
+                :disabled="submitting"
+                @remove="onRemove"
+                class="uploader"
+            >
                 <inbox-outlined />
                 <span class="hint">Kéo file vào đây hoặc bấm để chọn — .xlsx / .xls / .csv</span>
                 <span class="sub">
@@ -23,8 +40,14 @@
                     </template>
 
                     <div v-if="previewRows.length">
-                        <a-table :columns="previewColumns" :data-source="previewRows" :pagination="{ pageSize: 10 }"
-                            size="small" bordered row-key="__row" />
+                        <a-table
+                            :columns="previewColumns"
+                            :data-source="previewRows"
+                            :pagination="{ pageSize: 10 }"
+                            size="small"
+                            bordered
+                            row-key="__row"
+                        />
                     </div>
                     <a-empty v-else description="Chưa có dữ liệu để xem trước" />
                 </a-tab-pane>
@@ -57,7 +80,7 @@ import customParse from 'dayjs/plugin/customParseFormat'
 dayjs.extend(customParse)
 
 import { productivityEntryApi } from '@/services/production_service/productivityEntryService'
-import { validateItemCodeRule } from '@/utils/itemRuleHelper' // ✅ dùng helper mới
+import { validateItemCodeRule } from '@/utils/itemRuleHelper'
 import { useAuthStore } from '@/stores/auth'
 import { storeToRefs } from 'pinia'
 
@@ -82,6 +105,8 @@ const activeTab = ref('preview')
 const previewRows = ref([])
 const previewColumns = ref([])
 
+const todayYmd = () => dayjs().format('YYYY-MM-DD')
+
 function slugHeader(v) {
     return (v || '')
         .toString()
@@ -93,15 +118,17 @@ function slugHeader(v) {
         .replace(/\s/g, '_')
 }
 
-function pad(n) { return String(n).padStart(2, '0') }
+function pad(n) {
+    return String(n).padStart(2, '0')
+}
 
-// YYYY-MM-DD hoặc null
 function parseProductionDate(value) {
     if (typeof value === 'number' || (/^\d+(\.\d+)?$/.test(String(value)))) {
         const code = Number(value)
         const p = XLSX.SSF.parse_date_code(code)
         if (p && p.y && p.m && p.d) return `${p.y}-${pad(p.m)}-${pad(p.d)}`
     }
+
     const s = String(value || '').trim()
     const fmts = ['DD/MM/YYYY', 'D/M/YYYY', 'DD-MM-YYYY', 'D-M-YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY', 'M/D/YYYY', 'M/D/YY']
     for (const f of fmts) {
@@ -114,6 +141,7 @@ function parseProductionDate(value) {
 function required(v) {
     return v !== undefined && v !== null && String(v).trim() !== ''
 }
+
 function isNumberLike(v) {
     return v !== '' && !isNaN(Number(v))
 }
@@ -157,12 +185,15 @@ async function parseExcel(file) {
 }
 
 function beforeUpload(file) {
+    if (submitting.value) return false
+
     fileList.value = [file]
     errors.value = []
     success.value = false
     insertedCount.value = 0
     previewRows.value = []
     previewColumns.value = []
+
     parseExcel(file).catch(() => message.error('Không đọc được file Excel'))
     return false
 }
@@ -184,14 +215,12 @@ function renderErrorItem({ item }) {
 }
 
 async function submit() {
+    if (submitting.value) return
     if (!fileList.value.length) return message.warning('Vui lòng chọn file Excel trước.')
     if (!previewRows.value.length) return message.warning('File không có dữ liệu.')
 
     const rowErrors = []
     const payload = []
-
-    // ✅ Theo dõi bộ khóa (production_date, item_code, order_no, team_code)
-    // Lưu cả dòng đầu tiên gặp để báo "đã xuất hiện ở dòng X"
     const seenKeys = new Map()
 
     previewRows.value.forEach(r => {
@@ -199,7 +228,11 @@ async function submit() {
         const e = []
 
         const production_date = r.__dateISO || parseProductionDate(r['ngay_san_xuat'])
-        if (!production_date) e.push('Không nhận dạng được ngày tháng năm ở cột Ngày sản xuất.')
+        if (!production_date) {
+            e.push('Không nhận dạng được ngày tháng năm ở cột Ngày sản xuất.')
+        } else if (production_date > todayYmd()) {
+            e.push('Ngày sản xuất không được lớn hơn ngày hiện tại.')
+        }
 
         const workshop_code = String(r['xuong'] ?? '').trim()
         const team_code = String(r['to_nhom'] ?? '').trim()
@@ -219,21 +252,16 @@ async function submit() {
             if (!vr.ok) vr.errors.forEach(msg => e.push(`Mã "${item_code}": ${msg}`))
         }
 
-        // ✅ Chỉ kiểm tra trùng khi đủ 4 trường của khóa
         if (production_date && required(item_code) && required(order_no) && required(team_code)) {
-            // khoá trùng theo yêu cầu: ngày + mã + đơn hàng + tổ
             const key = `${production_date}__${item_code}__${order_no}__${team_code}`
 
             if (seenKeys.has(key)) {
                 const firstRow = seenKeys.get(key)
-                // ⬇️ Thông điệp chi tiết "trùng về cái gì"
                 e.push(
                     `Trùng bản ghi trong file: cùng ` +
                     `Ngày="${production_date}", Mã="${item_code}", Đơn hàng="${order_no}", Tổ="${team_code}"` +
                     ` (đã xuất hiện ở dòng ${firstRow}).`
                 )
-
-                // ⛔️ Lưu ý: KHÔNG chặn nếu khác đơn hàng hoặc khác tổ — chỉ báo khi đúng bộ khóa trên.
             } else {
                 seenKeys.set(key, row)
             }
@@ -249,12 +277,10 @@ async function submit() {
                 order_no,
                 item_code,
                 qty_actual: Number(qty_actual_raw),
-                created_by_name: user.value?.name || 'Không rõ', // 👈 THÊM DÒNG NÀY
+                created_by_name: user.value?.name || 'Không rõ',
             })
         }
     })
-
-
 
     if (rowErrors.length) {
         errors.value = rowErrors
@@ -287,7 +313,6 @@ async function submit() {
         submitting.value = false
     }
 }
-
 </script>
 
 <style scoped>

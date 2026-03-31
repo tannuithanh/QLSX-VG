@@ -1,21 +1,49 @@
 <template>
-    <a-modal v-model:visible="innerVisible" :title="isEdit ? 'Cập nhật năng suất' : 'Thêm năng suất'" ok-text="Lưu"
-        cancel-text="Huỷ" destroy-on-close @ok="submit" @cancel="$emit('cancel')" width="720px">
+    <a-modal
+        v-model:visible="innerVisible"
+        :title="isEdit ? 'Cập nhật năng suất' : 'Thêm năng suất'"
+        ok-text="Lưu"
+        cancel-text="Huỷ"
+        destroy-on-close
+        @ok="submit"
+        @cancel="$emit('cancel')"
+        width="720px"
+    >
         <a-form :model="form" layout="vertical">
             <div class="grid grid-2">
                 <a-form-item label="Ngày sản xuất" required>
-                    <a-date-picker v-model:value="form.production_date" value-format="YYYY-MM-DD" format="DD/MM/YYYY"
-                        style="width:100%" placeholder="Chọn ngày" />
+                    <a-date-picker
+                        v-model:value="form.production_date"
+                        value-format="YYYY-MM-DD"
+                        format="DD/MM/YYYY"
+                        style="width:100%"
+                        placeholder="Chọn ngày"
+                        :disabled-date="disabledFutureDate"
+                    />
                 </a-form-item>
 
                 <a-form-item label="Xưởng" required>
-                    <a-select v-model:value="form.workshop_id" :options="workshopOptions" placeholder="Chọn xưởng"
-                        style="width:100%" show-search :filter-option="filterOption" @change="onWorkshopChange" />
+                    <a-select
+                        v-model:value="form.workshop_id"
+                        :options="workshopOptions"
+                        placeholder="Chọn xưởng"
+                        style="width:100%"
+                        show-search
+                        :filter-option="filterOption"
+                        @change="onWorkshopChange"
+                    />
                 </a-form-item>
 
                 <a-form-item label="Tổ" required>
-                    <a-select v-model:value="form.team_id" :options="teamOptionsFiltered" placeholder="Chọn tổ"
-                        style="width:100%" show-search :filter-option="filterOption" @change="onTeamChange" />
+                    <a-select
+                        v-model:value="form.team_id"
+                        :options="teamOptionsFiltered"
+                        placeholder="Chọn tổ"
+                        style="width:100%"
+                        show-search
+                        :filter-option="filterOption"
+                        @change="onTeamChange"
+                    />
                 </a-form-item>
 
                 <a-form-item label="Đơn hàng" required>
@@ -44,7 +72,7 @@ const props = defineProps({
     initial: { type: Object, default: null },
     workshops: { type: Array, default: () => [] },
     teams: { type: Array, default: () => [] },
-    createdByName: { type: String, default: '' }, // 🆕 nhận từ cha
+    createdByName: { type: String, default: '' },
 })
 const emit = defineEmits(['update:visible', 'submit', 'cancel'])
 
@@ -53,14 +81,16 @@ const innerVisible = computed({
     set: v => emit('update:visible', v),
 })
 
+const todayYmd = () => dayjs().format('YYYY-MM-DD')
+
 const form = reactive({
-    production_date: dayjs().format('YYYY-MM-DD'),
+    production_date: todayYmd(),
     workshop_id: null,
     team_id: null,
     order_no: '',
     item_code: '',
     qty_actual: 0,
-    created_by_name: '', // 🆕
+    created_by_name: '',
 })
 
 const isEdit = computed(() => !!props.initial?.id)
@@ -68,9 +98,11 @@ const isEdit = computed(() => !!props.initial?.id)
 const workshopOptions = computed(() =>
     (props.workshops || []).map(w => ({ label: `${w.name} (${w.code})`, value: w.id }))
 )
+
 const teamOptions = computed(() =>
     (props.teams || []).map(t => ({ label: `${t.name} (${t.code})`, value: t.id, workshop_id: t.workshop_id }))
 )
+
 const teamOptionsFiltered = computed(() =>
     form.workshop_id ? teamOptions.value.filter(t => t.workshop_id === form.workshop_id) : teamOptions.value
 )
@@ -89,24 +121,33 @@ function onTeamChange(tid) {
     if (team && team.workshop_id) form.workshop_id = team.workshop_id
 }
 
+function disabledFutureDate(current) {
+    return current && current.endOf('day').isAfter(dayjs().endOf('day'))
+}
+
 watch(() => props.initial, (v) => {
-    if (!v) { reset(); return }
-    form.production_date = v.production_date || dayjs().format('YYYY-MM-DD')
+    if (!v) {
+        reset()
+        return
+    }
+
+    form.production_date = v.production_date || todayYmd()
     form.workshop_id = v.workshop_id ?? null
     form.team_id = v.team_id ?? null
     form.order_no = v.order_no || ''
     form.item_code = v.item_code || ''
     form.qty_actual = Number(v.qty_actual ?? 0)
+    form.created_by_name = v.created_by_name || props.createdByName || ''
 }, { immediate: true })
 
 function reset() {
-    form.production_date = dayjs().format('YYYY-MM-DD')
+    form.production_date = todayYmd()
     form.workshop_id = null
     form.team_id = null
     form.order_no = ''
     form.item_code = ''
     form.qty_actual = 0
-    form.created_by_name = props.createdByName || '' // 🆕 mặc định tên người dùng
+    form.created_by_name = props.createdByName || ''
 }
 
 function submit() {
@@ -114,8 +155,21 @@ function submit() {
         message.error('Vui lòng chọn ngày, xưởng và tổ')
         return
     }
-    if (!form.order_no.trim()) return message.error('Vui lòng nhập Đơn hàng')
-    if (!form.item_code.trim()) return message.error('Vui lòng nhập Mã hàng')
+
+    if (form.production_date > todayYmd()) {
+        message.error('Ngày sản xuất không được lớn hơn ngày hiện tại')
+        return
+    }
+
+    if (!form.order_no.trim()) {
+        message.error('Vui lòng nhập Đơn hàng')
+        return
+    }
+
+    if (!form.item_code.trim()) {
+        message.error('Vui lòng nhập Mã hàng')
+        return
+    }
 
     emit('submit', {
         production_date: form.production_date,
@@ -124,7 +178,7 @@ function submit() {
         order_no: form.order_no.trim(),
         item_code: form.item_code.trim(),
         qty_actual: Number(form.qty_actual || 0),
-        created_by_name: form.created_by_name || props.createdByName || 'System', // 🆕
+        created_by_name: form.created_by_name || props.createdByName || 'System',
     })
 }
 </script>

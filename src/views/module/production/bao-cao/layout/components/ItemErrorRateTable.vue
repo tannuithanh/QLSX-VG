@@ -10,6 +10,7 @@ const props = defineProps({
     visible: { type: Boolean, default: true },
     percentDigits: { type: Number, default: 2 },
     title: { type: String, default: "TỶ LỆ LỖI / SẢN LƯỢNG THEO MÃ HÀNG" },
+    isMobile: { type: Boolean, default: false }
 });
 const emit = defineEmits(["update:teamId", "update:stageIds"]);
 
@@ -167,21 +168,21 @@ const aggregate = computed(() => {
     }
 
     // 3) Hợp nhất tất cả mã (kể cả chỉ có sản lượng hoặc chỉ có lỗi)
-    const items = new Set([...actualByItem.keys(), ...errByItem.keys()]);
+    const itemsSet = new Set([...actualByItem.keys(), ...errByItem.keys()]);
 
     // 4) Tạo dòng kết quả
-    const rows = [];
-    for (const item of items) {
+    const rowsArr = [];
+    for (const item of itemsSet) {
         const actual = actualByItem.get(item) ?? 0;
         const errors = errByItem.get(item) ?? 0;
 
         // ==== Nhiều TỔ đồng hạng ====
         const teamMapForItem = byItemTeam.get(item) || new Map();
         let maxTeamQty = 0;
-        for (const q of teamMapForItem.values()) if (q > maxTeamQty) maxTeamQty = q;
+        for (const qQty of teamMapForItem.values()) if (qQty > maxTeamQty) maxTeamQty = qQty;
         const topTeams = Array.from(teamMapForItem.entries())
-            .filter(([_, q]) => q === maxTeamQty && q > 0)
-            .map(([name, q]) => ({ name, qty: q, pct: errors > 0 ? (q / errors) * 100 : 0 }));
+            .filter(([_, qQty]) => qQty === maxTeamQty && qQty > 0)
+            .map(([name, qQty]) => ({ name, qty: qQty, pct: errors > 0 ? (qQty / errors) * 100 : 0 }));
 
         // ==== Nhiều CẶP đồng hạng ====
         const pairMapForItem = byItemPair.get(item) || new Map();
@@ -197,7 +198,7 @@ const aggregate = computed(() => {
                 pct: errors > 0 ? (p.qty / errors) * 100 : 0
             }));
 
-        rows.push({
+        rowsArr.push({
             key: item,
             item_code: item,
             actual,
@@ -218,26 +219,26 @@ const aggregate = computed(() => {
         });
     }
 
-    rows.sort((a, b) => b.rate - a.rate);
-    return rows;
+    rowsArr.sort((a, b) => b.rate - a.rate);
+    return rowsArr;
 });
 
 /* ================== Table state ================== */
-const q = ref("");
+const qSearch = ref("");
 const onlyHasError = ref(false);
-const pageSize = ref(20);
-const current = ref(1);
-const sort = ref({ field: "rate", order: "descend" });
+const pageSizeSet = ref(20);
+const currentSet = ref(1);
+const sortSet = ref({ field: "rate", order: "descend" });
 
 const filtered = computed(() => {
-    const kw = q.value.trim().toLowerCase();
+    const kw = qSearch.value.trim().toLowerCase();
     let arr = aggregate.value;
     if (kw) arr = arr.filter(x => (x.item_code || "").toLowerCase().includes(kw));
     if (onlyHasError.value) arr = arr.filter(x => (x.errors || 0) > 0);
 
-    if (sort.value?.field) {
-        const f = sort.value.field;
-        const dir = sort.value.order === "ascend" ? 1 : -1;
+    if (sortSet.value?.field) {
+        const f = sortSet.value.field;
+        const dir = sortSet.value.order === "ascend" ? 1 : -1;
         arr = [...arr].sort((a, b) => {
             const va = a[f]; const vb = b[f];
             if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
@@ -248,17 +249,15 @@ const filtered = computed(() => {
 });
 
 const paged = computed(() => {
-    const start = (Number(current.value) - 1) * Number(pageSize.value);
-    return filtered.value.slice(start, start + Number(pageSize.value));
+    const start = (Number(currentSet.value) - 1) * Number(pageSizeSet.value);
+    return filtered.value.slice(start, start + Number(pageSizeSet.value));
 });
 
 function handleChange(pagination, _filters, sorter) {
-    current.value = Number(pagination?.current ?? 1);
-    pageSize.value = Number(pagination?.pageSize ?? 20);
-    if (sorter?.field) sort.value = { field: sorter.field, order: sorter.order };
+    currentSet.value = Number(pagination?.current ?? 1);
+    pageSizeSet.value = Number(pagination?.pageSize ?? 20);
+    if (sorter?.field) sortSet.value = { field: sorter.field, order: sorter.order };
 }
-
-
 
 /* ================== Expanded row (VNode) ================== */
 function expandedRowRender(record) {
@@ -275,7 +274,7 @@ function expandedRowRender(record) {
                     h("tr", null, [
                         h("th", null, "Tổ"),
                         h("th", { style: "text-align:right" }, "Số lượng lỗi"),
-                        h("th", { style: "text-align:right" }, "% trong lỗi của mã")
+                        h("th", { style: "text-align:right" }, "% trong lỗi")
                     ])
                 ]),
                 h("tbody", null,
@@ -288,21 +287,19 @@ function expandedRowRender(record) {
             ])
         ]),
         h("div", { class: "exp-col" }, [
-            h("div", { class: "exp-title" }, "Chi tiết theo (Công đoạn – Mã lỗi)"),
+            h("div", { class: "exp-title" }, "Chi tiết theo Công đoạn"),
             h("table", { class: "mini" }, [
                 h("thead", null, [
                     h("tr", null, [
                         h("th", null, "Công đoạn"),
                         h("th", null, "Mã lỗi"),
-                        h("th", { style: "text-align:right" }, "Số lượng lỗi"),
-                        h("th", { style: "text-align:right" }, "% trong lỗi của mã")
+                        h("th", { style: "text-align:right" }, "Phần trăm")
                     ])
                 ]),
                 h("tbody", null,
                     pairs.map(p => h("tr", null, [
                         h("td", null, p.stage),
                         h("td", null, p.codeLabel),
-                        h("td", { style: "text-align:right" }, String(p.qty)),
                         h("td", { style: "text-align:right" }, `${Number(p.pct || 0).toFixed(props.percentDigits)}%`),
                     ]))
                 )
@@ -315,65 +312,52 @@ function expandedRowRender(record) {
 <template>
     <div v-if="visible">
         <!-- Bộ lọc -->
-        <div class="toolbar">
-            <a-select v-model:value="teamId" allow-clear style="min-width:220px" :options="teamOptions"
+        <div :class="['toolbar', isMobile ? 'mobile-toolbar' : '']">
+            <a-select v-model:value="teamId" allow-clear :style="isMobile ? 'width:100%' : 'min-width:220px'" :options="teamOptions"
                 placeholder="Lọc theo Tổ (tuỳ chọn)" />
-            <a-select v-model:value="stageIds" mode="multiple" allow-clear style="min-width:320px"
-                :options="stageOptions" :loading="loadingStages" :max-tag-count="2"
+            <a-select v-model:value="stageIds" mode="multiple" allow-clear :style="isMobile ? 'width:100%' : 'min-width:320px'"
+                :options="stageOptions" :loading="loadingStages" :max-tag-count="1"
                 placeholder="Lọc theo Công đoạn (nhiều)" />
-            <a-input v-model:value="q" allow-clear style="width:240px" placeholder="Tìm mã hàng..." />
+            <a-input v-model:value="qSearch" allow-clear :style="isMobile ? 'width:100%' : 'width:240px'" placeholder="Tìm mã hàng..." />
             <a-checkbox v-model:checked="onlyHasError">Chỉ hiển thị có lỗi</a-checkbox>
         </div>
 
-        <!-- Bảng -->
-        <a-table :data-source="paged"
-            :pagination="{ current, pageSize, total: filtered.length, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'] }"
+        <!-- Bảng Desktop -->
+        <a-table v-if="!isMobile" :data-source="paged"
+            :pagination="{ current: currentSet, pageSize: pageSizeSet, total: filtered.length, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'] }"
             @change="handleChange" size="middle" bordered
             :row-class-name="(r) => (r.errors || 0) === 0 ? 'row-zero' : ((r.errors > 0 && r.actual === 0) ? 'row-warn' : '')"
             :expandable="{ expandedRowRender }">
             <template #title>
                 <div style="font-weight:700">{{ title }}</div>
             </template>
-            <!-- Mã hàng + badge -->
             <a-table-column title="Mã hàng" dataIndex="item_code" key="item_code" sorter align="center">
                 <template #default="{ text, record }">
-                    <div class="code">{{ text }}</div>
-                    <div class="subs">
+                    <div class="code-text">{{ text }}</div>
+                    <div class="subs-badge">
                         <a-tag v-if="(record.errors || 0) === 0" color="green">Không có lỗi</a-tag>
                         <a-tag v-else-if="record.actual === 0" color="orange">Không tìm thấy mã trong năng suất</a-tag>
                     </div>
                 </template>
             </a-table-column>
-
-            <!-- Số lượng năng suất (center) -->
-            <a-table-column title="Số lượng năng suất" dataIndex="actual" key="actual" sorter align="center"
-                width="160" />
-
-            <!-- Số lượng lỗi (center) -->
-            <a-table-column title="Số lượng lỗi" dataIndex="errors" key="errors" sorter align="center" width="140" />
-
-            <!-- % lỗi trên sản lượng (center) -->
-            <a-table-column title="% lỗi (trên sản lượng)" key="rate" dataIndex="rate" sorter align="center"
-                width="180">
+            <a-table-column title="Năng suất" dataIndex="actual" key="actual" sorter align="center" width="120" />
+            <a-table-column title="Số lỗi" dataIndex="errors" key="errors" sorter align="center" width="100" />
+            <a-table-column title="% lỗi" key="rate" dataIndex="rate" sorter align="center" width="120">
                 <template #default="{ text }">{{ Number(text || 0).toFixed(percentDigits) }}%</template>
             </a-table-column>
-
-            <!-- % lỗi theo tổ (theo format gạch đầu dòng) -->
-            <a-table-column title="% lỗi theo tổ" key="top_team_names" width="300">
+            <a-table-column title="% lỗi theo tổ" key="top_team_names" width="280">
                 <template #default="{ record }">
-                    <div class="multiline" v-if="Array.isArray(record.top_teams) && record.top_teams.length">
+                    <div class="multiline" v-if="record.top_teams?.length">
                         <div v-for="t in record.top_teams" :key="t.name">
-                            - {{ t.name }} ({{ t.qty }} lỗi): {{ Number(t.pct || 0).toFixed(percentDigits) }}%
+                            - {{ t.name }} ({{ t.qty }}): {{ Number(t.pct || 0).toFixed(percentDigits) }}%
                         </div>
                     </div>
                     <div v-else>—</div>
                 </template>
             </a-table-column>
-
-            <!-- Lỗi chủ yếu (Công đoạn - Mã lỗi) -->
-            <a-table-column title="Lỗi chủ yếu (Công đoạn - Mã lỗi )" key="top_pair_label" width="360">
+            <a-table-column title="Lỗi chủ yếu" key="top_pair_label" width="320">
                 <template #default="{ record }">
-                    <div class="multiline" v-if="Array.isArray(record.top_pairs) && record.top_pairs.length">
+                    <div class="multiline" v-if="record.top_pairs?.length">
                         <div v-for="p in record.top_pairs" :key="p.stage + p.code">
                             - {{ p.stage }} - {{ p.codeLabel }}
                         </div>
@@ -382,6 +366,64 @@ function expandedRowRender(record) {
                 </template>
             </a-table-column>
         </a-table>
+
+        <!-- View Mobile Card -->
+        <div v-else class="mobile-card-list">
+            <div class="mb-2" style="font-weight:700; color:#666">{{ title }}</div>
+            <div v-for="record in paged" :key="record.key" class="mobile-card">
+                <div class="card-header-orange">
+                    <span class="card-item-code">{{ record.item_code }}</span>
+                    <a-tag v-if="(record.errors || 0) === 0" color="green" style="margin-left:auto">OK</a-tag>
+                    <a-tag v-else-if="record.actual === 0" color="error" style="margin-left:auto">!</a-tag>
+                </div>
+                <div class="card-body">
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="lbl">Sản lượng</div>
+                            <div class="val">{{ record.actual }}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="lbl">Số lỗi</div>
+                            <div class="val text-danger">{{ record.errors }}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="lbl">Tỷ lệ lỗi</div>
+                            <div class="val text-primary">{{ Number(record.rate).toFixed(2) }}%</div>
+                        </div>
+                    </div>
+
+                    <a-collapse ghost expand-icon-position="right" class="mt-2">
+                        <a-collapse-panel key="1" header="Phân tích theo Tổ">
+                            <div v-if="record._teams?.length">
+                                <div v-for="t in record._teams" :key="t.name" class="breakdown-item">
+                                    <span class="name">{{ t.name }}</span>
+                                    <span class="qty">{{ t.qty }} lỗi</span>
+                                    <span class="pct">{{ Number(t.pct).toFixed(1) }}%</span>
+                                </div>
+                            </div>
+                            <a-empty v-else size="small" description="Không có dữ liệu" />
+                        </a-collapse-panel>
+                        <a-collapse-panel key="2" header="Phân tích Công đoạn - Lỗi">
+                            <div v-if="record._pairs?.length">
+                                <div v-for="p in record._pairs" :key="p.stage + p.code" class="breakdown-item pair">
+                                    <div class="pair-row">
+                                        <span class="stage">{{ p.stage }}</span>
+                                        <span class="pct">{{ Number(p.pct).toFixed(1) }}%</span>
+                                    </div>
+                                    <div class="pair-code">{{ p.codeLabel }}</div>
+                                </div>
+                            </div>
+                            <a-empty v-else size="small" description="Không có dữ liệu" />
+                        </a-collapse-panel>
+                    </a-collapse>
+                </div>
+            </div>
+
+            <div class="pagination-center mt-3">
+                <a-pagination v-model:current="currentSet" v-model:pageSize="pageSizeSet"
+                    :total="filtered.length" size="small" show-less-items />
+            </div>
+        </div>
     </div>
 </template>
 
@@ -391,31 +433,35 @@ function expandedRowRender(record) {
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
-    margin: 12px 0
+    margin: 12px 0;
 }
 
-.subs {
-    margin-top: 4px
+.mobile-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
 }
 
-.multiline>div {
-    line-height: 1.35
+.subs-badge {
+    margin-top: 4px;
 }
 
-.code {
-    font-weight: 600
+.multiline > div {
+    line-height: 1.35;
+    font-size: 13px;
+}
+
+.code-text {
+    font-weight: 600;
 }
 
 .row-zero td {
-    background: #f6ffed !important
+    background: #f6ffed !important;
 }
 
-/* xanh nhạt: không có lỗi */
 .row-warn td {
-    background: #fff7e6 !important
+    background: #fff7e6 !important;
 }
 
-/* cam nhạt: có lỗi nhưng không có sản lượng */
 .exp-wrap {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -424,7 +470,8 @@ function expandedRowRender(record) {
 
 .exp-title {
     font-weight: 700;
-    margin-bottom: 6px
+    margin-bottom: 6px;
+    color: #1890ff;
 }
 
 table.mini {
@@ -436,11 +483,115 @@ table.mini th,
 table.mini td {
     border: 1px solid #eee;
     padding: 6px 8px;
-    font-size: 12px
+    font-size: 12px;
 }
 
 table.mini thead th {
     background: #fafafa;
+}
+
+/* Mobile Card Styling */
+.mobile-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mobile-card {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-left: 5px solid #c06252; /* Thêm gạch màu cam chủ đạo bên trái */
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-header-orange {
+    background: #c06252; /* Màu cam gạch chủ đạo */
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    color: #fff;
+}
+
+.card-item-code {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.5px;
+}
+
+.card-body {
+    padding: 12px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+    border-bottom: 1px dashed #eee;
+    padding-bottom: 12px;
+}
+
+.metric-item {
+    text-align: center;
+}
+
+.metric-item .lbl {
+    font-size: 11px;
+    color: #8c8c8c;
+    margin-bottom: 2px;
+}
+
+.metric-item .val {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.text-danger { color: #f5222d; }
+.text-primary { color: #1890ff; }
+
+.breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+}
+
+.breakdown-item:last-child {
+    border-bottom: none;
+}
+
+.breakdown-item.pair {
+    flex-direction: column;
+}
+
+.pair-row {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.pair-code {
+    font-size: 11px;
+    color: #666;
+}
+
+:deep(.ant-collapse-header) {
+    padding: 8px 0 !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+
+:deep(.ant-collapse-content-box) {
+    padding: 0 0 8px 0 !important;
+}
+
+.pagination-center {
+    display: flex;
+    justify-content: center;
 }
 
 @media (max-width: 768px) {

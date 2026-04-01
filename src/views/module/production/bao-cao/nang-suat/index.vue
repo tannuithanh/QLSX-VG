@@ -1,44 +1,48 @@
 <template>
-    <div class="p-4">
-        <a-page-header title="Báo cáo năng suất" />
+    <div class="p-report" :class="{ 'is-mobile': isMobile }">
+        <div class="report-header">
+            <h2 class="report-title">Báo cáo năng suất</h2>
+        </div>
 
-        <a-card class="mb-4">
+        <a-card class="mb-4 shadow-sm">
             <ReportToolbar v-model:reportType="reportType" v-model:search="search" :loading="loading"
                 :date-from="dateFrom" :date-to="dateTo" :workshops="workshops" :teams="teams"
-                v-model:workshopId="searchWorkshopId" v-model:teamId="searchTeamId" @submit="onSubmitRange"
+                v-model:workshopId="searchWorkshopId" v-model:teamId="searchTeamId" 
+                :is-mobile="isMobile"
+                @submit="onSubmitRange"
                 @reload="reload" />
         </a-card>
 
-        <a-row :gutter="16" v-if="reportType === 'nang-suat'">
+        <a-row :gutter="[16, 16]" v-if="reportType === 'nang-suat'">
             <a-col :span="24">
                 <a-card>
-                    <div class="mb-3 flex items-center justify-between">
-                        <div>
+                    <div class="report-header-info mb-3">
+                        <div class="range-info">
                             <strong>Khoảng ngày: </strong>
                             <span v-if="selectedRangeText">{{ selectedRangeText }}</span>
                             <span v-else>Chưa chọn</span>
-                            <span class="ml-2 text-muted">
-                                (KPI chuẩn chỉ cộng theo ngày có dữ liệu thực tế của từng tổ/xưởng)
-                            </span>
+                        </div>
+                        <div class="note-info text-muted">
+                            (KPI chuẩn chỉ cộng theo ngày có dữ liệu thực tế của từng tổ/xưởng)
                         </div>
                     </div>
 
                     <!-- Bảng chi tiết theo mã -->
                     <ProductivityReportTable :rows="filteredRows" :loading="loading" v-model:pageSize="pageSize"
-                        v-model:current="current" />
+                        v-model:current="current" :is-mobile="isMobile" />
 
-                    <!-- Bảng tổng hợp theo Tổ (giữ nguyên) -->
+                    <!-- Bảng tổng hợp theo Tổ -->
                     <div class="mt-4">
-                        <TeamTotalsTable :rows="teamTotalsRows" :loading="loading" />
+                        <TeamTotalsTable :rows="teamTotalsRows" :loading="loading" :is-mobile="isMobile" />
                     </div>
 
                     <!-- Hai bảng tổng -->
-                    <a-row :gutter="16" class="mt-4">
-                        <a-col :span="12">
-                            <TeamDailySummaryTable :rows="teamDailyRows" :loading="loading" />
+                    <a-row :gutter="[16, 16]" class="mt-4">
+                        <a-col :xs="24" :md="12">
+                            <TeamDailySummaryTable :rows="teamDailyRows" :loading="loading" :is-mobile="isMobile" />
                         </a-col>
-                        <a-col :span="12">
-                            <TeamLayoutSummaryTable :rows="teamLayoutRows" :loading="loading" />
+                        <a-col :xs="24" :md="12">
+                            <TeamLayoutSummaryTable :rows="teamLayoutRows" :loading="loading" :is-mobile="isMobile" />
                         </a-col>
                     </a-row>
                 </a-card>
@@ -55,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 
@@ -85,6 +89,12 @@ const searchTeamId = ref(null)
 
 const pageSize = ref(10)
 const current = ref(1)
+
+// Responsive logic
+const isMobile = ref(false)
+const checkMobile = () => {
+    isMobile.value = window.innerWidth < 768
+}
 
 /* ====== master & map ====== */
 const workshops = ref([])
@@ -428,44 +438,73 @@ function reload() { buildReport() }
 
 /* ====== lifecycle ====== */
 onMounted(async () => {
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
     await fetchMaster()
+})
+
+onUnmounted(() => {
+    window.removeEventListener('resize', checkMobile)
 })
 </script>
 
 <style scoped>
-.p-4 {
+.p-report {
     padding: 16px;
+    background-color: #f5f7f9;
+    min-height: 100vh;
 }
 
-.mb-4 {
+.report-header {
+    margin-bottom: 20px;
+}
+
+.report-title {
+    margin: 0;
+    color: #c06252;
+    font-weight: 700;
+    font-size: 24px;
+}
+
+.shadow-sm {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.report-header-info {
+    padding: 12px;
+    background: #fffbe6;
+    border-left: 4px solid #ffe58f;
+    border-radius: 4px;
     margin-bottom: 16px;
 }
 
-.mb-3 {
-    margin-bottom: 12px;
+.range-info {
+    font-size: 15px;
+    margin-bottom: 4px;
 }
 
-.mt-4 {
-    margin-top: 16px;
+@media (max-width: 768px) {
+    .p-report {
+        padding: 10px;
+    }
+    
+    .report-title {
+        font-size: 20px;
+        text-align: center;
+    }
+    
+    .report-header-info {
+        font-size: 13px;
+    }
 }
 
-.flex {
-    display: flex;
-}
-
-.items-center {
-    align-items: center;
-}
-
-.justify-between {
-    justify-content: space-between;
-}
-
-.ml-2 {
-    margin-left: 8px;
-}
-
-.text-muted {
-    color: #8c8c8c;
-}
+.p-4 { padding: 16px; }
+.mb-4 { margin-bottom: 16px; }
+.mb-3 { margin-bottom: 12px; }
+.mt-4 { margin-top: 16px; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.ml-2 { margin-left: 8px; }
+.text-muted { color: #8c8c8c; }
 </style>

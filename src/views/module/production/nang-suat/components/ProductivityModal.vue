@@ -7,7 +7,9 @@
         destroy-on-close
         @ok="submit"
         @cancel="$emit('cancel')"
-        width="720px"
+        :width="isMobile ? '100%' : 720"
+        :style="isMobile ? { top: '0', maxWidth: '100vw', padding: '0' } : { maxWidth: '95vw' }"
+        :body-style="isMobile ? { height: 'calc(100vh - 108px)', overflowY: 'auto' } : {}"
     >
         <a-form :model="form" layout="vertical">
             <div class="grid grid-2">
@@ -63,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, watch, ref, onMounted, onUnmounted } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 
@@ -75,6 +77,20 @@ const props = defineProps({
     createdByName: { type: String, default: '' },
 })
 const emit = defineEmits(['update:visible', 'submit', 'cancel'])
+
+const isMobile = ref(false)
+const checkMobile = () => {
+    isMobile.value = window.innerWidth < 768
+}
+
+onMounted(() => {
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('resize', checkMobile)
+})
 
 const innerVisible = computed({
     get: () => props.visible,

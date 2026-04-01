@@ -1,10 +1,13 @@
 <template>
-  <a-layout-sider theme="light" v-model:collapsed="collapsed" :trigger="null" collapsible>
-    <div class="logo">
-      <router-link to="/"><img src="@/assets/images/logo.png" alt="Logo" width="75" /></router-link>
+  <div class="sidebar-container">
+    <div v-if="!collapsed" class="logo">
+      <router-link to="/">
+        <img src="@/assets/images/logo.png" alt="Logo" :width="75" />
+      </router-link>
     </div>
 
-    <a-menu :selectedKeys="[activeKey]" :openKeys="openKeys" @openChange="onOpenChange" theme="light" mode="inline">
+    <a-menu :selectedKeys="[activeKey]" :openKeys="openKeys" @openChange="onOpenChange" theme="light" mode="inline"
+      :inlineCollapsed="collapsed">
       <!-- Trang chủ -->
       <a-menu-item key="home">
         <template #icon>
@@ -63,12 +66,12 @@
         </a-sub-menu>
       </a-sub-menu>
     </a-menu>
-  </a-layout-sider>
+  </div>
 </template>
 
 <script setup>
 import { useRoute } from 'vue-router'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, defineProps } from 'vue'
 
 import {
   HomeOutlined,
@@ -78,19 +81,26 @@ import {
   BugOutlined,
   FileTextOutlined,
   LineChartOutlined,
-  LayoutOutlined, // mở lại mục "Báo cáo Layout" thì bỏ comment dòng này
+  LayoutOutlined,
 } from '@ant-design/icons-vue'
 
-const collapsed = ref(false)
-const route = useRoute()
+const props = defineProps({
+  collapsed: {
+    type: Boolean,
+    default: false
+  }
+})
 
+const route = useRoute()
 const activeKey = computed(() => route.meta.activeKey || '')
 
 const openKeys = ref([])
 watch(
   () => route.fullPath,
   () => {
-    openKeys.value = Array.isArray(route.meta.openKeys) ? [...route.meta.openKeys] : []
+    if (!props.collapsed) {
+      openKeys.value = Array.isArray(route.meta.openKeys) ? [...route.meta.openKeys] : []
+    }
   },
   { immediate: true }
 )
@@ -100,15 +110,20 @@ function onOpenChange(keys) {
 }
 </script>
 
-
-
 <style scoped>
+.sidebar-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .logo {
-  height: 90px;
-  margin: 15px;
+  height: 64px; /* Giảm chiều cao logo cho đồng bộ với header */
+  margin: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.3s;
 }
 
 .logo img {

@@ -109,10 +109,10 @@ async function logout() {
 .header {
   background: #fff;
   height: 64px;
-  line-height: 64px;
+  line-height: normal; /* Sửa lại line-height cố định */
   position: relative;
   z-index: 10;
-  padding: 0 16px;
+  padding: 0; /* Bo bỏ padding vì MainLayout đã có padding cho header */
 }
 
 .header-inner {
@@ -130,6 +130,15 @@ async function logout() {
   gap: 12px;
 }
 
+@media (max-width: 576px) {
+  .header-inner {
+    gap: 8px;
+  }
+  .left-slot, .right-slot {
+    gap: 8px;
+  }
+}
+
 .header__user {
   display: flex;
   align-items: center;
@@ -138,10 +147,22 @@ async function logout() {
   line-height: 1;
 }
 
+@media (max-width: 480px) {
+  .header__user {
+    gap: 0;
+  }
+}
+
 .user-meta {
   display: flex;
   flex-direction: column;
   line-height: 1.2;
+}
+
+@media (max-width: 480px) {
+  .user-meta {
+    display: none; /* Ẩn thông tin tên/vị trí trên mobile siêu nhỏ */
+  }
 }
 
 .header__username {

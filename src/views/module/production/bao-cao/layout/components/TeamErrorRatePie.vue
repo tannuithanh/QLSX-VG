@@ -38,8 +38,10 @@ const props = defineProps({
     entries: { type: Array, default: () => [] },
     teamNameById: { type: Object, default: () => ({}) },
 
-    height: { type: [String, Number], default: 420 },
-    title: { type: String, default: 'TỶ LỆ TỔNG LỖI / TỔNG SỐ LƯỢNG THỰC TẾ CỦA TỔ' },
+    height: { type: [String, Number], default: 360 },
+    title: { type: String, default: 'TỶ LỆ LỖI / SỐ LƯỢNG THỰC TẾ THEO TỔ' },
+    percentDigits: { type: Number, default: 2 },
+    isMobile: { type: Boolean, default: false },
     visible: { type: Boolean, default: true },
 })
 
@@ -170,70 +172,65 @@ function render() {
         }
         ensureChart()
         if (!chart) return
+
         const root = chart.getDom()
         const cs = getComputedStyle(root)
         const antFontVar = cs.getPropertyValue('--ant-font-family')?.trim()
         const FONT_STACK =
             "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
-        const fontFamily =
-            antFontVar && antFontVar.length ? antFontVar : FONT_STACK
+        const fontFamily = antFontVar && antFontVar.length ? antFontVar : FONT_STACK
+
         const data = seriesItems.value.map(d => ({
             name: d.name,
             value: Number(d.value),
             _err: Number(d.errors || 0),
             _act: Number(d.actual || 0),
-            _rate: Number(d.value),
+            _val: Number(d.value),
         }))
-        const option = {
-            textStyle: { fontFamily },
 
-            title: {
-                text: props.title,
-                left: 'center',
-                top: 6,
-                textStyle: { fontSize: 20, fontWeight: 700, fontFamily },
+        chart.setOption({
+            textStyle: { fontFamily },
+            title: { 
+                text: props.title, 
+                left: 'center', 
+                top: 6, 
+                textStyle: { fontSize: props.isMobile ? 16 : 20, fontWeight: 700, fontFamily } 
             },
             tooltip: {
                 trigger: 'item',
-                textStyle: { fontFamily },
+                confine: true,
+                textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 14 },
                 formatter: (p) => {
                     const d = p.data || {}
                     return [
                         `<b>${p.name}</b>`,
-                        `Tỷ lệ: ${d._rate?.toFixed(2)}%`,
-                        `Lỗi/SẢN PHẨM: ${d._err} / ${d._act}`,
+                        `Tỷ lệ: ${d._val?.toFixed(props.percentDigits)}%`,
+                        `Lỗi: ${d._err}`,
+                        `Thực tế: ${d._act}`
                     ].join('<br/>')
-                },
+                }
             },
-            legend: {
-                type: 'scroll',
-                orient: 'horizontal',
-                bottom: 0,
-                left: 'center',
-                itemGap: 24,
-                itemWidth: 18,
-                itemHeight: 12,
-                pageButtonItemGap: 10,
-                pageIconSize: 12,
-                textStyle: { fontFamily /*, fontSize: 12*/ },
+            legend: { 
+                type: 'scroll', 
+                bottom: 8, 
+                textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 12 } 
             },
-            series: [
-                {
-                    type: 'pie',
-                    radius: ['30%', '70%'],
-                    center: ['50%', '52%'],
-                    avoidLabelOverlap: true,
-                    label: {
-                        show: true,
-                        formatter: ({ data }) => `${data.name}\n${(data._rate ?? 0).toFixed(1)}%`,
-                        fontFamily,
-                    },
-                    labelLine: { length: 12, length2: 10 },
-                    data,
+            series: [{
+                type: 'pie',
+                radius: props.isMobile ? ['30%', '60%'] : ['40%', '70%'],
+                center: props.isMobile ? ['50%', '50%'] : ['50%', '52%'],
+                avoidLabelOverlap: true,
+                label: { 
+                    show: true, 
+                    formatter: ({ name, data }) => props.isMobile ? `${Number(data.value).toFixed(1)}%` : `${name}\n${Number(data.value).toFixed(2)}%`, 
+                    fontFamily,
+                    fontSize: props.isMobile ? 10 : 12
                 },
-            ],
-        }
-        chart.setOption(option, true)
+                labelLine: { show: !props.isMobile, length: 12, length2: 10 },
+                data,
+            }],
+        }, { notMerge: true })
+
         chart.resize()
     })
 }
@@ -265,6 +262,10 @@ onBeforeUnmount(disposeChart)
     margin-top: 12px;
 }
 
+.grand {
+    border-left: 4px solid #c06252;
+    border-radius: 6px;
+}
 .grand .grand-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,28 +1,28 @@
 <template>
-    <a-form layout="inline" @submit.prevent>
-        <a-form-item label="Xưởng" required>
-            <a-select v-model:value="innerWorkshopId" :loading="loading" style="min-width: 260px" show-search
-                :filter-option="filterOpt" placeholder="Chọn xưởng">
+    <a-form :layout="isMobile ? 'vertical' : 'inline'" @submit.prevent :class="{ 'mobile-form': isMobile }">
+        <a-form-item label="Xưởng" required :class="{ 'mb-2': isMobile }">
+            <a-select v-model:value="innerWorkshopId" :loading="loading" :style="isMobile ? 'width: 100%' : 'min-width: 260px'"
+                show-search :filter-option="filterOpt" placeholder="Chọn xưởng">
                 <a-select-option v-for="w in workshops" :key="w.id" :value="w.id">
                     {{ w.name }} ({{ w.code }})
                 </a-select-option>
             </a-select>
         </a-form-item>
 
-        <a-form-item label="Từ ngày" required>
+        <a-form-item label="Từ ngày" required :class="{ 'mb-2': isMobile }">
             <a-date-picker v-model:value="innerDateFrom" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-                placeholder="YYYY-MM-DD" />
+                placeholder="YYYY-MM-DD" :style="isMobile ? 'width: 100%' : ''" />
         </a-form-item>
 
-        <a-form-item label="Đến ngày" required>
+        <a-form-item label="Đến ngày" required :class="{ 'mb-2': isMobile }">
             <a-date-picker v-model:value="innerDateTo" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-                placeholder="YYYY-MM-DD" />
+                placeholder="YYYY-MM-DD" :style="isMobile ? 'width: 100%' : ''" />
         </a-form-item>
 
-        <a-form-item>
-            <a-space>
-                <a-button type="primary" :loading="loading" @click="submit">Xem báo cáo</a-button>
-                <a-button :disabled="loading" @click="reset">Xoá lọc</a-button>
+        <a-form-item :class="isMobile ? 'mt-2 mb-0' : ''">
+            <a-space :style="isMobile ? 'width: 100%; justify-content: center' : ''">
+                <a-button type="primary" :loading="loading" @click="submit" :block="isMobile">Xem báo cáo</a-button>
+                <a-button :disabled="loading" @click="reset" :block="isMobile">Xoá lọc</a-button>
             </a-space>
         </a-form-item>
     </a-form>
@@ -37,6 +37,7 @@ const props = defineProps({
     workshopId: { type: [Number, String, null], default: null },
     dateFrom: { type: [String, null], default: null },
     dateTo: { type: [String, null], default: null },
+    isMobile: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:workshopId', 'update:dateFrom', 'update:dateTo', 'submit', 'reset'])
 
@@ -59,3 +60,21 @@ const filterOpt = (input, option) =>
 function submit() { emit('submit') }
 function reset() { emit('reset') }
 </script>
+
+<style scoped>
+.mobile-form :deep(.ant-form-item) {
+    margin-right: 0;
+}
+
+.mb-2 {
+    margin-bottom: 8px;
+}
+
+.mt-2 {
+    margin-top: 8px;
+}
+
+.mb-0 {
+    margin-bottom: 0;
+}
+</style>

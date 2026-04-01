@@ -17,6 +17,7 @@ const props = defineProps({
     height: { type: [String, Number], default: 360 },
     title: { type: String, default: 'TỶ LỆ LỖI THEO CÔNG ĐOẠN / SỐ LƯỢNG THỰC TẾ' },
     percentDigits: { type: Number, default: 2 },
+    isMobile: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['validation-issues', 'update:teamId', 'update:stageIds'])
@@ -225,23 +226,40 @@ function render() {
 
         chart.setOption({
             textStyle: { fontFamily },
-            title: { text: props.title, left: 'center', top: 6, textStyle: { fontSize: 20, fontWeight: 700, fontFamily } },
+            title: { 
+                text: props.title, 
+                left: 'center', 
+                top: 6, 
+                textStyle: { fontSize: props.isMobile ? 16 : 20, fontWeight: 700, fontFamily } 
+            },
             tooltip: {
                 trigger: 'item',
-                textStyle: { fontFamily },
+                confine: true,
+                textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 14 },
                 formatter: (p) => {
                     const d = p.data || {}
                     return [`<b>${p.name}</b>`, `Tỷ lệ: ${d._rate?.toFixed(props.percentDigits)}%`, `Lỗi/Thực tế: ${d._err} / ${d._act}`].join('<br/>')
                 }
             },
-            legend: { type: 'scroll', bottom: 0, textStyle: { fontFamily } },
+            legend: { 
+                type: 'scroll', 
+                bottom: 6, 
+                textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 12 },
+                pageButtonStyle: props.isMobile ? { size: 12 } : {}
+            },
             series: [{
                 type: 'pie',
-                radius: ['30%', '70%'],
-                center: ['50%', '52%'],
+                radius: props.isMobile ? ['30%', '60%'] : ['30%', '70%'],
+                center: props.isMobile ? ['50%', '50%'] : ['50%', '52%'],
                 avoidLabelOverlap: true,
-                label: { show: true, formatter: ({ data }) => `${data.name}\n${Number(data._rate ?? 0).toFixed(2)}%`, fontFamily },
-                labelLine: { length: 12, length2: 10 },
+                label: { 
+                    show: true, 
+                    position: props.isMobile ? 'outside' : 'outside',
+                    formatter: ({ data }) => props.isMobile ? `${Number(data._rate ?? 0).toFixed(1)}%` : `${data.name}\n${Number(data._rate ?? 0).toFixed(2)}%`, 
+                    fontFamily,
+                    fontSize: props.isMobile ? 10 : 12
+                },
+                labelLine: { show: !props.isMobile, length: 12, length2: 10 },
                 data,
             }],
         }, { notMerge: true })
@@ -258,11 +276,11 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
 <template>
     <div>
         <!-- Toolbar -->
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px">
-            <a-select v-model:value="teamId" allow-clear style="min-width:220px" :options="teamOptions"
+        <div :style="{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px', flexDirection: isMobile ? 'column' : 'row' }">
+            <a-select v-model:value="teamId" allow-clear :style="isMobile ? 'width: 100%' : 'min-width: 220px'" :options="teamOptions"
                 placeholder="Chọn tổ (tuỳ chọn)" />
-            <a-select v-model:value="stageIds" mode="multiple" allow-clear style="min-width:320px"
-                :loading="loadingStages" :options="stageOptions" :max-tag-count="2"
+            <a-select v-model:value="stageIds" mode="multiple" allow-clear :style="isMobile ? 'width: 100%' : 'min-width: 320px'"
+                :loading="loadingStages" :options="stageOptions" :max-tag-count="isMobile ? 1 : 2"
                 placeholder="Chọn công đoạn (nhiều)" />
         </div>
 
@@ -270,7 +288,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
         <a-empty v-if="visible && !hasData" description="Chưa có dữ liệu phù hợp" />
 
         <div class="mt-3" v-if="visible && hasData" style="margin-top:12px">
-            <a-card size="small">
+            <a-card size="small" class="grand">
                 <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px">
                     <div>
                         <div class="lbl">Tổng lỗi</div>
@@ -300,5 +318,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
 .val {
     font-size: 18px;
     font-weight: 700
+}
+
+.grand {
+    border-left: 4px solid #c06252;
+    border-radius: 6px;
 }
 </style>

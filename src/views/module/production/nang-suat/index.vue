@@ -2,8 +2,29 @@
 <template>
   <div class="stack">
     <div class="actions" v-if="canAdd">
-      <h2 style="margin:0">Quản lý năng suất</h2>
-      <a-space>
+      <h2 class="page-title">Quản lý năng suất</h2>
+      
+      <div v-if="isMobile" class="mobile-actions">
+        <a-dropdown>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item @click="openImport">
+                Import Excel
+              </a-menu-item>
+              <a-menu-item :disabled="!exportFilterOk || exporting" @click="exportExcel">
+                Xuất Excel
+              </a-menu-item>
+              <a-menu-item :disabled="!saveAllEnabled || savingAll" @click="saveAllCalcs">
+                Lưu tính tất cả
+              </a-menu-item>
+            </a-menu>
+          </template>
+          <a-button>Thao tác khác <DownOutlined /></a-button>
+        </a-dropdown>
+        <a-button type="primary" @click="openCreate">Thêm năng suất</a-button>
+      </div>
+
+      <a-space v-else>
         <a-button @click="openImport">Import Excel</a-button>
 
         <a-tooltip :title="exportTooltip">
@@ -70,8 +91,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, reactive, ref, computed, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { DownOutlined } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
 
 import ProductivityFilter from './components/ProductivityFilter.vue'
@@ -90,6 +112,12 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
+
+// Responsive logic
+const isMobile = ref(false)
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 768
+}
 
 const norm = (c) => String(c ?? '').trim().toUpperCase()
 const isAdmin = computed(() => !!user.value?.is_admin)
@@ -662,6 +690,9 @@ const layoutIssueList = computed(() => {
 
 /* ===== Init ===== */
 onMounted(async () => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+
   if (!exportFilterOk.value) {
     filters.value.dateRange = [
       dayjs().startOf('month').format('YYYY-MM-DD'),
@@ -672,15 +703,45 @@ onMounted(async () => {
   await Promise.all([fetchMaster(), fetchStdCoefficients(), fetchLayoutRatios()])
   await fetchEntries()
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 </script>
 
 <style scoped>
 .stack {
-  display: grid;
-  gap: 12px;
-}
-.actions {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .mobile-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .mobile-actions > .ant-btn {
+    flex: 1;
+  }
+
+  .page-title {
+    font-size: 1.2rem;
+    margin: 0;
+    text-align: center;
+  }
+}
+
+.page-title {
+  margin: 0;
+  color: #c06252;
+  font-weight: 700;
 }
 </style>

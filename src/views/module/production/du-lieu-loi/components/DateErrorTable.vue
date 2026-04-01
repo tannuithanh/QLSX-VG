@@ -1,6 +1,73 @@
 <template>
     <div>
+        <div v-if="isMobile" class="mobile-card-list">
+            <a-card v-for="(record, index) in rows" :key="record.id" class="mobile-card" size="small">
+                <template #title>
+                    <div class="card-title">
+                        <span class="stt-badge">#{{ (page - 1) * pageSize + index + 1 }}</span>
+                        <span class="date-text">{{ formatDate(record.production_date) }}</span>
+                        <a-tag v-if="record.is_scrapped" color="red" style="margin-left:8px">Hủy</a-tag>
+                    </div>
+                </template>
+                <template #extra>
+                    <TableActionButtons
+                        :showView="false"
+                        :showEdit="canEdit"
+                        :showDelete="canDelete"
+                        :confirmOnDelete="true"
+                        @edit="$emit('edit', record)"
+                        @delete="$emit('delete', record)"
+                    />
+                </template>
+
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="label">Xưởng/Tổ:</span>
+                        <span class="value">
+                            {{ formatEntity(record.workshop, record.workshop_name, record.workshop_code) }} / 
+                            {{ formatEntity(record.team, record.team_name, record.team_code) }}
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Đơn hàng:</span>
+                        <span class="value">{{ record.order_no || '—' }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Mã hàng:</span>
+                        <span class="value"><strong>{{ record.item_code || '—' }}</strong></span>
+                    </div>
+                    
+                    <div class="error-summary-row highlight">
+                        <span class="label">Số lượng lỗi:</span>
+                        <span class="value error-qty">{{ record.error_qty ?? 0 }}</span>
+                    </div>
+
+                    <a-divider style="margin: 8px 0" />
+                    
+                    <div class="error-details">
+                        <div v-if="record.error_code_1 || record.error_stage_1" class="error-item">
+                            <span class="dot">•</span>
+                            <span class="err-text">Lỗi 1: <strong>{{ record.error_code_1 }}</strong> tại <em>{{ stageName(record.error_stage_1) }}</em></span>
+                        </div>
+                        <div v-if="record.error_code_2 || record.error_stage_2" class="error-item">
+                            <span class="dot">•</span>
+                            <span class="err-text">Lỗi 2: <strong>{{ record.error_code_2 }}</strong> tại <em>{{ stageName(record.error_stage_2) }}</em></span>
+                        </div>
+                        <div v-if="record.error_code_3 || record.error_stage_3" class="error-item">
+                            <span class="dot">•</span>
+                            <span class="err-text">Lỗi 3: <strong>{{ record.error_code_3 }}</strong> tại <em>{{ stageName(record.error_stage_3) }}</em></span>
+                        </div>
+                    </div>
+                </div>
+            </a-card>
+
+            <div v-if="rows.length === 0" class="empty-state">
+                <a-empty description="Không có dữ liệu lỗi" />
+            </div>
+        </div>
+
         <a-table
+            v-else
             :columns="columns"
             :data-source="rows"
             :pagination="false"
@@ -87,6 +154,7 @@
 import { computed } from 'vue'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
+import TableActionButtons from '@/components/common/TableActionButtons.vue'
 dayjs.extend(utc)
 
 const props = defineProps({
@@ -97,6 +165,7 @@ const props = defineProps({
     stageNameByCode: { type: Object, default: () => ({}) },
     canEdit: { type: Boolean, default: false },
     canDelete: { type: Boolean, default: false },
+    isMobile: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['page-change', 'page-size-change', 'edit', 'delete'])
@@ -232,4 +301,113 @@ const columns = computed(() => {
     return cols
 })
 </script>
+
+<style scoped>
+.mobile-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mobile-card {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid #f0f0f0;
+}
+
+:deep(.ant-card-head) {
+    background-color: #c06252;
+    border-bottom: none;
+    min-height: 48px;
+}
+
+.card-title {
+    display: flex;
+    align-items: center;
+    color: white;
+}
+
+.stt-badge {
+    background: #8a2b1f;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.date-text {
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 4px 0;
+}
+
+.info-row {
+    display: flex;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.label {
+    color: #8c8c8c;
+    width: 100px;
+    flex-shrink: 0;
+}
+
+.value {
+    color: #262626;
+    word-break: break-all;
+}
+
+.error-summary-row {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    padding: 8px;
+    background: #fff1f0;
+    border-radius: 6px;
+}
+
+.error-qty {
+    font-size: 18px;
+    font-weight: 700;
+    color: #cf1322;
+}
+
+.error-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.error-item {
+    display: flex;
+    gap: 6px;
+    font-size: 13px;
+    color: #595959;
+}
+
+.dot {
+    color: #c06252;
+}
+
+.err-text strong {
+    color: #262626;
+}
+
+.empty-state {
+    padding: 32px;
+    background: white;
+    border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+    :deep(.ant-table-wrapper) {
+        display: none;
+    }
+}
+</style>
 

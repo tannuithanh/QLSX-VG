@@ -1,5 +1,11 @@
 <template>
-    <a-form layout="inline" @submit.prevent>
+    <div :class="['filter-container', { 'is-mobile': isMobile }]">
+        <div v-if="isMobile" class="mobile-filter-header" @click="collapsed = !collapsed">
+            <span><FilterOutlined /> Bộ lọc tìm kiếm</span>
+            <component :is="collapsed ? DownOutlined : UpOutlined" />
+        </div>
+
+        <a-form v-show="!isMobile || !collapsed" :layout="isMobile ? 'vertical' : 'inline'" @submit.prevent class="filter-form">
         <a-form-item label="Đơn hàng">
             <a-input v-model:value="model.order_no" allowClear style="width:220px" placeholder="Nhập đơn hàng" />
         </a-form-item>
@@ -42,11 +48,13 @@
                 <a-button @click="reset">Xoá lọc</a-button>
             </a-space>
         </a-form-item>
-    </a-form>
+        </a-form>
+    </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, onUnmounted } from 'vue'
+import { FilterOutlined, DownOutlined, UpOutlined } from '@ant-design/icons-vue'
 import { workshopApi } from '@/services/production_service/workshopService'
 import { teamApi } from '@/services/production_service/teamService'
 
@@ -150,5 +158,47 @@ function reset() {
     emit('reset')
 }
 
-onMounted(loadLookups)
+const isMobile = ref(false)
+const collapsed = ref(true)
+const checkMobile = () => {
+    isMobile.value = window.innerWidth < 768
+}
+
+onMounted(() => {
+    loadLookups()
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('resize', checkMobile)
+})
 </script>
+
+<style scoped>
+.filter-container {
+    padding: 8px 0;
+}
+
+.mobile-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 4px;
+    cursor: pointer;
+    color: #c06252;
+    font-weight: 600;
+}
+
+.filter-form :deep(.ant-form-item) {
+    margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+    .filter-form :deep(.ant-input),
+    .filter-form :deep(.ant-select),
+    .filter-form :deep(.ant-picker) {
+        width: 100% !important;
+    }
+}
+</style>

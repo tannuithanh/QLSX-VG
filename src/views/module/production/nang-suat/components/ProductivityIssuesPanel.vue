@@ -151,6 +151,29 @@ function pillClass(it) {
   flex-wrap: wrap;
 }
 
+@media (max-width: 576px) {
+  .pill-wrap {
+    grid-template-columns: 1fr;
+  }
+  
+  .pill {
+    padding: 8px 10px;
+  }
+
+  .pill-head {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .code {
+    font-size: 14px;
+  }
+
+  .key {
+    font-size: 11px;
+  }
+}
+
 .tight {
   margin-inline: 0;
 }

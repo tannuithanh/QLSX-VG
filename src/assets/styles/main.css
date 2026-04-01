@@ -130,10 +130,59 @@ body {
 }
 
 
+/* Responsive Utilities */
+@media (max-width: 480px) {
+  .hide-xs { display: none !important; }
+  .full-width-xs { width: 100% !important; }
+}
+
+@media (max-width: 576px) {
+  .hide-sm { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  .hide-md { display: none !important; }
+  
+  .ant-card .ant-card-head {
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  
+  .ant-card-body {
+    padding: 12px !important;
+  }
+}
+
+/* Bảng - responsive fixes */
+.ant-table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 576px) {
+  .ant-table-thead > tr > th {
+    padding: 8px 4px !important;
+    font-size: 12px;
+  }
+  .ant-table-tbody > tr > td {
+    padding: 8px 4px !important;
+    font-size: 12px;
+  }
+}
+
+/* Nút bấm trên mobile */
+@media (max-width: 576px) {
+  .ant-btn {
+    padding: 4px 8px;
+    font-size: 13px;
+    height: auto;
+  }
+}
+
 /* Áp dụng cho toàn bộ trang */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -144,9 +193,9 @@ body {
 ::-webkit-scrollbar-thumb {
   background-color: #c06252;
   border-radius: 100px;
-  border: 2px solid #f5f5f5; /* viền trắng cho cảm giác mượt */
+  border: 1px solid #f5f5f5;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #c06252;
+  background-color: #a44e42;
 }

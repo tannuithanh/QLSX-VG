@@ -1,17 +1,21 @@
 <template>
     <a-modal v-model:visible="innerVisible" :title="isEdit ? 'Sửa dữ liệu lỗi' : 'Thêm dữ liệu lỗi'" ok-text="Lưu"
-        cancel-text="Hủy" :confirm-loading="submitting" destroy-on-close width="900px" @ok="onOk"
+        cancel-text="Hủy" :confirm-loading="submitting" destroy-on-close 
+        :width="isMobile ? '100%' : '900px'" 
+        :style="isMobile ? { top: '0', maxWidth: '100vw', padding: '0' } : { maxWidth: '95vw' }"
+        :body-style="isMobile ? { height: 'calc(100vh - 108px)', overflowY: 'auto' } : {}"
+        @ok="onOk"
         @cancel="emit('update:visible', false)">
         <a-form :model="form" layout="vertical">
             <a-row :gutter="12">
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="Ngày sản xuất" required>
                         <a-date-picker v-model:value="form.ngay_sx" format="DD/MM/YYYY" value-format="YYYY-MM-DD"
                             :disabled-date="disabledFutureDate" style="width:100%" />
                     </a-form-item>
                 </a-col>
 
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="Xưởng" required>
                         <a-select v-model:value="form.xuong_id" allow-clear placeholder="Chọn xưởng"
                             :loading="loadingLookups" show-search :filter-option="selectFilter"
@@ -23,7 +27,7 @@
                     </a-form-item>
                 </a-col>
 
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="Tổ / nhóm" required>
                         <a-select v-model:value="form.to_id" allow-clear placeholder="Chọn tổ"
                             :disabled="!form.xuong_id" :loading="loadingLookups" show-search
@@ -35,19 +39,19 @@
                     </a-form-item>
                 </a-col>
 
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="Đơn hàng" required>
                         <a-input v-model:value="form.don_hang" placeholder="Nhập đơn hàng" />
                     </a-form-item>
                 </a-col>
 
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="Mã hàng" required>
                         <a-input v-model:value="form.ma_hang" placeholder="Nhập mã hàng" />
                     </a-form-item>
                 </a-col>
 
-                <a-col :span="8">
+                <a-col :xs="24" :sm="8">
                     <a-form-item label="SL lỗi" required>
                         <a-input-number v-model:value="form.sl_loi" :min="0" style="width:100%" placeholder="0" />
                     </a-form-item>
@@ -57,13 +61,13 @@
             <a-divider orientation="left">Lỗi phát sinh</a-divider>
 
             <a-row :gutter="12">
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Mã lỗi 1">
                         <a-select v-model:value="form.ma_loi1" allow-clear placeholder="Chọn mã lỗi 1"
                             :options="errorCodeOptions" show-search :filter-option="selectFilter" />
                     </a-form-item>
                 </a-col>
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Công đoạn PS 1">
                         <a-select v-model:value="form.cong_doan_ps1" allow-clear placeholder="Chọn công đoạn 1"
                             :options="stageOptions" show-search :filter-option="selectFilter" />
@@ -72,13 +76,13 @@
             </a-row>
 
             <a-row :gutter="12">
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Mã lỗi 2">
                         <a-select v-model:value="form.ma_loi2" allow-clear placeholder="Chọn mã lỗi 2"
                             :options="errorCodeOptions" show-search :filter-option="selectFilter" />
                     </a-form-item>
                 </a-col>
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Công đoạn PS 2">
                         <a-select v-model:value="form.cong_doan_ps2" allow-clear placeholder="Chọn công đoạn 2"
                             :options="stageOptions" show-search :filter-option="selectFilter" />
@@ -87,13 +91,13 @@
             </a-row>
 
             <a-row :gutter="12">
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Mã lỗi 3">
                         <a-select v-model:value="form.ma_loi3" allow-clear placeholder="Chọn mã lỗi 3"
                             :options="errorCodeOptions" show-search :filter-option="selectFilter" />
                     </a-form-item>
                 </a-col>
-                <a-col :span="12">
+                <a-col :xs="24" :sm="12">
                     <a-form-item label="Công đoạn PS 3">
                         <a-select v-model:value="form.cong_doan_ps3" allow-clear placeholder="Chọn công đoạn 3"
                             :options="stageOptions" show-search :filter-option="selectFilter" />
@@ -113,7 +117,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, watch, ref } from 'vue'
+import { computed, onMounted, reactive, watch, ref, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 
@@ -327,5 +331,18 @@ async function onOk() {
     }
 }
 
-onMounted(loadLookups)
+const isMobile = ref(false)
+const checkMobile = () => {
+    isMobile.value = window.innerWidth < 768
+}
+
+onMounted(() => {
+    loadLookups()
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('resize', checkMobile)
+})
 </script>

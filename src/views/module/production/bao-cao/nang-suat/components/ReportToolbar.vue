@@ -1,27 +1,40 @@
 <template>
-    <div class="toolbar">
-        <div class="left">
+    <div class="toolbar-container">
+        <a-row :gutter="[12, 12]" align="middle">
             <!-- Khoảng ngày -->
-            <a-range-picker class="ml" v-model:value="range" format="DD/MM/YYYY" value-format="YYYY-MM-DD"
-                placeholder="Chọn khoảng ngày" :disabled="loading" :allow-clear="true" />
+            <a-col :xs="24" :sm="12" :md="8" :lg="6">
+                <a-range-picker v-model:value="range" format="DD/MM/YYYY" value-format="YYYY-MM-DD"
+                    placeholder="Chọn khoảng ngày" :disabled="loading" :allow-clear="true" style="width: 100%" />
+            </a-col>
 
             <!-- Xưởng -->
-            <a-select class="ml sel" v-model:value="workshopId" :options="workshopOptions" allow-clear
-                placeholder="Chọn xưởng" show-search :filter-option="filterOption" :disabled="loading"
-                @change="onWorkshopChange" />
+            <a-col :xs="24" :sm="12" :md="8" :lg="4">
+                <a-select v-model:value="workshopId" :options="workshopOptions" allow-clear placeholder="Chọn xưởng"
+                    show-search :filter-option="filterOption" :disabled="loading" @change="onWorkshopChange"
+                    style="width: 100%" />
+            </a-col>
 
             <!-- Tổ (lọc theo xưởng) -->
-            <a-select class="ml sel" v-model:value="teamId" :options="teamOptionsFiltered" allow-clear
-                placeholder="Chọn tổ" show-search :filter-option="filterOption" :disabled="loading"
-                @change="onTeamChange" />
+            <a-col :xs="24" :sm="12" :md="8" :lg="4">
+                <a-select v-model:value="teamId" :options="teamOptionsFiltered" allow-clear placeholder="Chọn tổ"
+                    show-search :filter-option="filterOption" :disabled="loading" @change="onTeamChange"
+                    style="width: 100%" />
+            </a-col>
 
             <!-- Mã hàng -->
-            <a-input class="ml search" v-model:value="kw" :disabled="loading" allow-clear
-                placeholder="Tìm theo mã (item_code)" @pressEnter="emitSubmit" />
+            <a-col :xs="24" :sm="12" :md="8" :lg="5">
+                <a-input v-model:value="kw" :disabled="loading" allow-clear placeholder="Tìm theo mã (item_code)"
+                    @pressEnter="emitSubmit" style="width: 100%" />
+            </a-col>
 
-            <a-button type="primary" class="ml" :loading="loading" @click="emitSubmit">Xem báo cáo</a-button>
-            <a-button class="ml" :loading="loading" @click="$emit('reload')">Tải lại</a-button>
-        </div>
+            <!-- Nút bấm -->
+            <a-col :xs="24" :lg="5">
+                <a-space :style="{ width: '100%', justifyContent: isMobile ? 'center' : 'flex-end' }">
+                    <a-button type="primary" :loading="loading" @click="emitSubmit" class="full-width-xs">Xem</a-button>
+                    <a-button :loading="loading" @click="$emit('reload')" class="full-width-xs">Tải lại</a-button>
+                </a-space>
+            </a-col>
+        </a-row>
     </div>
 </template>
 
@@ -46,6 +59,7 @@ const props = defineProps({
     // filter theo ID
     workshopId: [String, Number],
     teamId: [String, Number],
+    isMobile: Boolean,
 })
 
 const emits = defineEmits([
@@ -122,30 +136,13 @@ function emitSubmit() {
 </script>
 
 <style scoped>
-.toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
+.toolbar-container {
+    width: 100%;
 }
 
-.left {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.ml {
-    margin-left: 8px;
-}
-
-.sel {
-    min-width: 220px;
-}
-
-.search {
-    width: 240px;
+@media (max-width: 576px) {
+  .full-width-xs {
+    width: 100%;
+  }
 }
 </style>

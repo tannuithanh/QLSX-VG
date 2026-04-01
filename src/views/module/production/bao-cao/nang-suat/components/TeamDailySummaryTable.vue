@@ -1,11 +1,11 @@
 <template>
     <div class="stack">
         <!-- Filters -->
-        <div class="filters">
+        <div class="filters" :class="{ 'is-mobile': isMobile }">
             <a-select v-model:value="workshopId" :options="workshopOptions" placeholder="Chọn xưởng" show-search
-                :filter-option="filterOption" style="min-width: 220px" />
+                :filter-option="filterOption" style="min-width: 200px" />
             <a-select v-model:value="teamId" :options="teamOptionsFiltered" placeholder="Chọn tổ" show-search
-                :filter-option="filterOption" style="min-width: 260px" />
+                :filter-option="filterOption" style="min-width: 200px" />
         </div>
 
         <!-- Biểu đồ cột + đường -->
@@ -28,6 +28,7 @@ echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, Leg
 const props = defineProps({
     rows: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },
+    isMobile: { type: Boolean, default: false },
 })
 
 const barEl = ref(null)
@@ -114,19 +115,38 @@ function comboOption() {
     return {
         tooltip: {
             trigger: 'axis',
+            confine: true, // Giữ tooltip trong chart
             valueFormatter: (v, s) => (s?.seriesName?.includes('%') ? pct(v) : fmt(v, 4))
         },
-        legend: { top: 0, data: ['Tổng SLSP', 'NS chuẩn/ngày', 'Tỷ lệ (Tổng/KPI) %'] },
-        grid: { left: 50, right: 60, bottom: 60, top: 40 },
-        xAxis: { type: 'category', data: cats, axisLabel: { interval: 0, rotate: cats.length > 8 ? 35 : 0 } },
+        legend: { 
+            top: 0, 
+            data: ['Tổng SLSP', 'NS chuẩn/ngày', 'Tỷ lệ (Tổng/KPI) %'],
+            type: props.isMobile ? 'scroll' : 'plain',
+            textStyle: { fontSize: props.isMobile ? 11 : 12 }
+        },
+        grid: { 
+            left: props.isMobile ? '15%' : 50, 
+            right: props.isMobile ? '12%' : 60, 
+            bottom: props.isMobile ? 80 : 60, 
+            top: props.isMobile ? 60 : 40 
+        },
+        xAxis: { 
+            type: 'category', 
+            data: cats, 
+            axisLabel: { 
+                interval: props.isMobile ? 'auto' : 0, 
+                rotate: props.isMobile ? 45 : (cats.length > 8 ? 35 : 0),
+                fontSize: props.isMobile ? 10 : 12
+            } 
+        },
         yAxis: [
-            { type: 'value', name: 'SLSP', axisLabel: { formatter: v => fmt(v, 0) } },
-            { type: 'value', name: 'Tỷ lệ', axisLabel: { formatter: v => `${fmt(v, 0)}%` }, min: 0 }
+            { type: 'value', name: 'SLSP', axisLabel: { formatter: v => fmt(v, 0), fontSize: props.isMobile ? 10 : 12 } },
+            { type: 'value', name: 'Tỷ lệ', axisLabel: { formatter: v => `${fmt(v, 0)}%`, fontSize: props.isMobile ? 10 : 12 }, min: 0 }
         ],
-        dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 10 }],
+        dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 5 }],
         series: [
-            { name: 'Tổng SLSP', type: 'bar', data: total, barMaxWidth: 32, emphasis: { focus: 'series' } },
-            { name: 'NS chuẩn/ngày', type: 'bar', data: kpi, barMaxWidth: 32, emphasis: { focus: 'series' } },
+            { name: 'Tổng SLSP', type: 'bar', data: total, barMaxWidth: props.isMobile ? 16 : 32, emphasis: { focus: 'series' } },
+            { name: 'NS chuẩn/ngày', type: 'bar', data: kpi, barMaxWidth: props.isMobile ? 16 : 32, emphasis: { focus: 'series' } },
             { name: 'Tỷ lệ (Tổng/KPI) %', type: 'line', yAxisIndex: 1, smooth: true, symbolSize: 6, data: ratioPct },
         ],
     }
@@ -234,13 +254,27 @@ watch([workshopId, teamId, () => props.rows], () => { pieChart ? pieChart.setOpt
     justify-content: flex-end;
 }
 
+.filters.is-mobile {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+}
+
 .chart {
     width: 100%;
     height: 420px;
 }
 
+.is-mobile .chart {
+    height: 380px;
+}
+
 .pie {
     width: 100%;
+    height: 340px;
+}
+
+.is-mobile .pie {
     height: 340px;
 }
 </style>

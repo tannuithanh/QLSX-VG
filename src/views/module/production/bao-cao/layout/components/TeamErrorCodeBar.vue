@@ -27,7 +27,9 @@ const props = defineProps({
     /** Tiêu đề */
     title: { type: String, default: 'TỶ LỆ (%) CÁC DẠNG LỖI / SẢN PHẨM THỰC TẾ THEO TỔ' },
     /** Số chữ số thập phân khi hiển thị % */
-    percentDigits: { type: Number, default: 2 }
+    percentDigits: { type: Number, default: 2 },
+    /** Chế độ mobile */
+    isMobile: { type: Boolean, default: false }
 })
 
 /** ===== Helpers ===== */
@@ -120,13 +122,13 @@ const dataset = computed(() => {
         name: typeName,
         type: 'bar',
         stack: 'pct',
-        barWidth: 18,
+        barWidth: props.isMobile ? 12 : 18,
         itemStyle: { borderRadius: [0, 6, 6, 0] },
         label: {
             show: true,
             position: 'insideRight',
             formatter: ({ value }) => (Number(value) >= 3 ? `${Number(value).toFixed(props.percentDigits)}%` : ''),
-            fontSize: 11,
+            fontSize: props.isMobile ? 9 : 11,
             padding: [0, 2]
         },
         data: topTeams.map(t => {
@@ -141,13 +143,13 @@ const dataset = computed(() => {
             name: OTHER_LABEL,
             type: 'bar',
             stack: 'pct',
-            barWidth: 18,
+            barWidth: props.isMobile ? 12 : 18,
             itemStyle: { opacity: 0.8 },
             label: {
                 show: true,
                 position: 'insideRight',
                 formatter: ({ value }) => (Number(value) >= 3 ? `${Number(value).toFixed(props.percentDigits)}%` : ''),
-                fontSize: 11,
+                fontSize: props.isMobile ? 9 : 11,
                 padding: [0, 2]
             },
             data: topTeams.map(t => {
@@ -190,12 +192,13 @@ const render = () => {
         title: {
             text: props.title,
             left: 'center',
-            textStyle: { fontSize: 20, fontWeight: 700, fontFamily }
+            textStyle: { fontSize: props.isMobile ? 16 : 20, fontWeight: 700, fontFamily }
         },
         tooltip: {
             trigger: 'axis',
             axisPointer: { type: 'shadow' },
-            textStyle: { fontFamily },
+            confine: true,
+            textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 14 },
             formatter: params => {
                 if (!Array.isArray(params) || !params.length) return ''
                 const idx = params[0].dataIndex
@@ -214,23 +217,33 @@ const render = () => {
                 return lines.join('<br/>')
             }
         },
-        legend: { type: 'scroll', top: 32, textStyle: { fontFamily } },
-        grid: { left: 90, right: 16, top: 76, bottom: 60, containLabel: true },
+        legend: { 
+            type: 'scroll', 
+            top: props.isMobile ? 36 : 32, 
+            textStyle: { fontFamily, fontSize: props.isMobile ? 10 : 12 } 
+        },
+        grid: { 
+            left: props.isMobile ? 10 : 90, 
+            right: 16, 
+            top: props.isMobile ? 90 : 76, 
+            bottom: props.isMobile ? 40 : 60, 
+            containLabel: true 
+        },
         xAxis: {
             type: 'value',
             name: '%',
             min: 0,
             max: 100,
-            axisLabel: { formatter: v => `${v}%`, fontFamily },
+            axisLabel: { formatter: v => `${v}%`, fontFamily, fontSize: props.isMobile ? 10 : 12 },
             nameTextStyle: { fontFamily }
         },
         yAxis: {
             type: 'category',
             data: yCats,
-            axisLabel: { interval: 0, fontFamily }
+            axisLabel: { interval: 0, fontFamily, fontSize: props.isMobile ? 10 : 12 }
         },
         dataZoom: [
-            { type: 'slider', yAxisIndex: 0, right: 0, width: 12 },
+            { type: 'slider', yAxisIndex: 0, right: 0, width: props.isMobile ? 8 : 12 },
             { type: 'inside', yAxisIndex: 0 }
         ],
         color: ['#5B8FF9', '#61DDAA', '#65789B', '#F6BD16', '#7262fd', '#78D3F8', '#9661BC', '#F6903D', '#F08BB4', '#3BA272', '#4ecdc4', '#ff6b6b', '#ffd166', '#118ab2', '#8338ec'],

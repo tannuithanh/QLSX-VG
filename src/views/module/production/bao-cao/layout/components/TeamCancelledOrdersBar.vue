@@ -12,15 +12,17 @@ const props = defineProps({
     /** Entries năng suất – dùng để tính tổng actual theo tổ */
     entries: { type: Array, default: () => [] },
     /** Chiều cao biểu đồ */
-    height: { type: [Number, String], default: 420 },
+    height: { type: [String, Number], default: 360 },
     /** Cho phép ẩn/hiện */
     visible: { type: Boolean, default: true },
     /** Hiển thị top N tổ (null/0 = tất cả) */
-    topN: { type: [Number, null], default: null },
+    topN: { type: Number, default: 12 },
     /** Tiêu đề */
     title: { type: String, default: 'TỶ LỆ (%) HỦY / TỔNG SỐ LƯỢNG THỰC TẾ CỦA TỔ' },
     /** Số chữ số thập phân phần trăm */
     percentDigits: { type: Number, default: 2 },
+    /** Chế độ mobile */
+    isMobile: { type: Boolean, default: false }
 })
 
 const heightStyle = computed(() => (typeof props.height === 'number' ? `${props.height}px` : String(props.height)))
@@ -109,7 +111,6 @@ const seriesData = computed(() => {
 function ensureChart() {
     if (!chart && chartEl.value) {
         chart = echarts.init(chartEl.value)
-        window.addEventListener('resize', handleResize)
     }
 }
 function handleResize() { chart && chart.resize() }
@@ -131,18 +132,18 @@ function render() {
         const names = seriesData.value.map(d => d.name)
         const values = seriesData.value.map(d => d.value)
 
-        const option = {
+        chart.setOption({
             textStyle: { fontFamily },
-            title: {
-                text: props.title,
-                left: 'center',
-                top: 6,
-                textStyle: { fontSize: 20, fontWeight: 700, fontFamily }, // (fix typo ffontSize)
+            title: { 
+                text: props.title, 
+                left: 'center', 
+                top: 6, 
+                textStyle: { fontSize: props.isMobile ? 16 : 20, fontWeight: 700, fontFamily } 
             },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' },
-                textStyle: { fontFamily },
+            tooltip: { 
+                trigger: 'axis', 
+                confine: true, 
+                textStyle: { fontFamily, fontSize: props.isMobile ? 11 : 14 },
                 formatter: params => {
                     const p = params?.[0]
                     if (!p) return ''
@@ -154,14 +155,21 @@ function render() {
                     ].join('<br/>')
                 }
             },
-            grid: { left: 48, right: 20, top: 52, bottom: 64 },
+            grid: { 
+                left: props.isMobile ? '12%' : '8%', 
+                right: '4%', 
+                bottom: props.isMobile ? 80 : 60, 
+                top: props.isMobile ? 60 : 50, 
+                containLabel: true 
+            },
             xAxis: {
                 type: 'category',
                 data: names,
-                axisLabel: {
-                    interval: 0,
-                    rotate: names.length > 6 ? 20 : 0,
-                    fontFamily
+                axisLabel: { 
+                    interval: props.isMobile ? 'auto' : 0, 
+                    rotate: props.isMobile ? 45 : 30, 
+                    fontSize: props.isMobile ? 10 : 12,
+                    fontFamily 
                 }
             },
             yAxis: {
@@ -170,6 +178,7 @@ function render() {
                 min: 0,
                 axisLabel: {
                     formatter: v => `${v}%`,
+                    fontSize: props.isMobile ? 10 : 12,
                     fontFamily
                 },
                 nameTextStyle: { fontFamily }
@@ -177,25 +186,28 @@ function render() {
             series: [{
                 type: 'bar',
                 data: values,
-                barMaxWidth: 42,
+                barMaxWidth: props.isMobile ? 20 : 42,
                 label: {
                     show: true,
                     position: 'top',
                     formatter: ({ value }) => `${Number(value).toFixed(props.percentDigits)}%`,
+                    fontSize: props.isMobile ? 10 : 12,
                     fontFamily
                 },
                 itemStyle: { borderRadius: [6, 6, 0, 0] },
             }],
             animationDuration: 500,
-        }
+        }, { notMerge: true })
 
-        chart.setOption(option, true)
         chart.resize()
     })
 }
 
 watch([seriesData, () => props.height, () => props.title, () => props.visible], render, { immediate: true })
-onMounted(render)
+onMounted(() => {
+    window.addEventListener('resize', handleResize)
+    render()
+})
 onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize)
     if (chart) { chart.dispose(); chart = null }

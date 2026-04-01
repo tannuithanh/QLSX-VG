@@ -2,27 +2,28 @@
     <div class="p-4">
         <h2 style="margin:0">Thống kê lỗi</h2>
 
-        <a-card class="mb-4">
+        <a-card class="mb-4" :bodyStyle="isMobile ? { padding: '12px' } : {}">
             <ErrorPieToolbar :loading="loading" :workshops="workshops" v-model:workshopId="workshopId"
-                v-model:dateFrom="dateFrom" v-model:dateTo="dateTo" @submit="runReport" @reset="onReset" />
+                v-model:dateFrom="dateFrom" v-model:dateTo="dateTo" :isMobile="isMobile" @submit="runReport"
+                @reset="onReset" />
 
-            <div class="viz-picker">
+            <div :class="['viz-picker', isMobile ? 'mobile-picker' : '']">
                 <a-checkbox v-model:checked="showAll">Chọn tất cả</a-checkbox>
-                <a-checkbox :checked="selected.includes('pie')" @change="() => toggle('pie')">Tỷ lệ lỗi theo công đoạn
+                <a-checkbox :checked="selected.includes('pie')" @change="() => toggle('pie')">Tỷ lệ lỗi công đoạn
                     (tròn)</a-checkbox>
                 <a-checkbox :checked="selected.includes('bar')" @change="() => toggle('bar')">Dạng lỗi theo tổ
                     (cột)</a-checkbox>
-                <a-checkbox :checked="selected.includes('rate')" @change="() => toggle('rate')">Tỷ lệ lỗi / số lượng
-                    thực tế (tròn)</a-checkbox>
-                <a-checkbox :checked="selected.includes('cancel')" @change="() => toggle('cancel')">Biểu đồ thể hiện
-                    hàng hủy của các tổ (cột)</a-checkbox>
-                <a-checkbox :checked="selected.includes('item')" @change="() => toggle('item')">Tỷ lệ lỗi theo mã hàng
+                <a-checkbox :checked="selected.includes('rate')" @change="() => toggle('rate')">Tỷ lệ lỗi / Thực tế
+                    (tròn)</a-checkbox>
+                <a-checkbox :checked="selected.includes('cancel')" @change="() => toggle('cancel')">Hàng hủy các tổ
+                    (cột)</a-checkbox>
+                <a-checkbox :checked="selected.includes('item')" @change="() => toggle('item')">Tỷ lệ lỗi mã hàng
                     (bảng)</a-checkbox>
             </div>
         </a-card>
 
-        <a-card>
-            <div class="mb-3">
+        <a-card :bodyStyle="isMobile ? { padding: '12px' } : {}">
+            <div :class="['mb-3', isMobile ? 'mobile-range' : '']">
                 <strong>Khoảng ngày: </strong>
                 <span v-if="dateFrom && dateTo">{{ fmtDmy(dateFrom) }} → {{ fmtDmy(dateTo) }}</span>
                 <span v-else>Chưa chọn</span>
@@ -35,7 +36,7 @@
                 <StageErrorRatePie v-if="selected.includes('pie')"
                     :key="`stagepie-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
                     :rows="rawRows" :entries="actualRows" :workshop-id="workshopId" :visible="selected.includes('pie')"
-                    :height="chartHeight" />
+                    :height="chartHeight" :isMobile="isMobile" />
 
                 <a-divider
                     v-if="selected.includes('pie') && (selected.includes('bar') || selected.includes('rate') || selected.includes('cancel') || selected.includes('item'))"
@@ -44,7 +45,7 @@
                 <TeamErrorCodeBar v-if="selected.includes('bar')"
                     :key="`bar-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
                     :rows="rawRows" :entries="actualRows" :visible="selected.includes('bar')" :height="chartHeight"
-                    :top-n="10" sort-by="rate" :max-types="6"
+                    :top-n="isMobile ? 8 : 10" sort-by="rate" :max-types="isMobile ? 4 : 6" :isMobile="isMobile"
                     title="TỶ LỆ (%) CÁC DẠNG LỖI / SẢN PHẨM THỰC TẾ THEO TỔ" />
 
                 <a-divider
@@ -53,7 +54,7 @@
 
                 <TeamErrorRatePie v-if="selected.includes('rate')"
                     :key="`rate-${workshopId}-${dateFrom}-${dateTo}-${rateRows.length}-${selected.length}`"
-                    :data="rateRows" :visible="selected.includes('rate')" :height="chartHeight" />
+                    :data="rateRows" :visible="selected.includes('rate')" :height="chartHeight" :isMobile="isMobile" />
 
                 <a-divider
                     v-if="selected.includes('rate') && (selected.includes('cancel') || selected.includes('item'))"
@@ -62,20 +63,21 @@
                 <TeamCancelledOrdersBar v-if="selected.includes('cancel')"
                     :key="`cancel-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
                     :rows="rawRows" :entries="actualRows" :visible="selected.includes('cancel')" :height="chartHeight"
-                    :top-n="12" />
+                    :isMobile="isMobile" :top-n="isMobile ? 8 : 12" />
 
                 <a-divider v-if="selected.includes('item') && (selected.length > 1)" dashed />
 
                 <ItemErrorRateTable v-if="selected.includes('item')"
                     :key="`item-${workshopId}-${dateFrom}-${dateTo}-${rawRows.length}-${actualRows.length}-${selected.length}`"
-                    :rows="rawRows" :entries="actualRows" :visible="selected.includes('item')" :percent-digits="2" />
+                    :rows="rawRows" :entries="actualRows" :visible="selected.includes('item')" :percent-digits="2"
+                    :isMobile="isMobile" />
             </div>
         </a-card>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import ErrorPieToolbar from './components/ErrorPieToolbar.vue'
@@ -94,6 +96,9 @@ const workshopId = ref(null)
 const dateFrom = ref(null)
 const dateTo = ref(null)
 
+const isMobile = ref(false)
+function checkMobile() { isMobile.value = window.innerWidth < 768 }
+
 const chartRows = ref([])
 const rawRows = ref([])
 const rateRows = ref([])
@@ -111,6 +116,7 @@ const toggle = (t) => {
 }
 
 const chartHeight = computed(() => {
+    if (isMobile.value) return '480px' // Tăng chiều cao trên mobile cho biểu đồ tròn/cột
     if (selected.value.length === 1) return '560px'
     if (selected.value.length === 2) return '420px'
     return '360px'
@@ -214,7 +220,14 @@ function onReset() {
     selected.value = ['pie', 'bar', 'rate', 'cancel', 'item']
 }
 
-onMounted(loadWorkshops)
+onMounted(() => {
+    loadWorkshops()
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+})
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', checkMobile)
+})
 </script>
 
 <style scoped>
@@ -244,6 +257,23 @@ onMounted(loadWorkshops)
     gap: 16px;
     align-items: center;
     flex-wrap: wrap;
+}
+
+.viz-picker.mobile-picker {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.viz-picker.mobile-picker :deep(.ant-checkbox-wrapper) {
+    margin-left: 0;
+    font-size: 13px;
+}
+
+.mobile-range {
+    font-size: 13px;
+    line-height: 1.6;
 }
 
 .chart-stack {

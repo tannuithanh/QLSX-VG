@@ -1,13 +1,27 @@
 <template>
     <section>
-        <a-space style="width:100%; justify-content: space-between; margin-bottom:12px">
-            <h2 style="margin:0">Quản lý dữ liệu lỗi</h2>
-            <a-space v-if="canAdd">
-                <a-button @click="showImport = true">Import Excel</a-button>
-                <a-button @click="handleExport">Xuất Excel</a-button>
-                <a-button type="primary" @click="openCreate()">Thêm mới</a-button>
-            </a-space>
-        </a-space>
+        <div class="page-header" :class="{ 'is-mobile': isMobile }">
+            <h2 class="page-title">Quản lý dữ liệu lỗi</h2>
+            <div v-if="canAdd" class="actions-wrap">
+                <template v-if="isMobile">
+                    <a-dropdown>
+                        <template #overlay>
+                            <a-menu>
+                                <a-menu-item @click="showImport = true">Import Excel</a-menu-item>
+                                <a-menu-item @click="handleExport">Xuất Excel</a-menu-item>
+                            </a-menu>
+                        </template>
+                        <a-button>Thao tác <DownOutlined /></a-button>
+                    </a-dropdown>
+                    <a-button type="primary" @click="openCreate()">Thêm mới</a-button>
+                </template>
+                <a-space v-else>
+                    <a-button @click="showImport = true">Import Excel</a-button>
+                    <a-button @click="handleExport">Xuất Excel</a-button>
+                    <a-button type="primary" @click="openCreate()">Thêm mới</a-button>
+                </a-space>
+            </div>
+        </div>
 
         <a-card size="small" style="margin-bottom: 16px; padding: 0 12px;">
             <DateErrorFilter v-model="filters" @search="onSearch" @reset="onReset" />
@@ -22,6 +36,7 @@
             :stage-name-by-code="stageNameByCode"
             :can-edit="canEdit"
             :can-delete="canDelete"
+            :is-mobile="isMobile"
             @page-change="onPageChange"
             @page-size-change="onPageSizeChange"
             @edit="openEdit"
@@ -35,8 +50,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { DownOutlined } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import * as XLSX from 'xlsx'
@@ -63,6 +79,12 @@ const can = (code) => isAdmin.value || moduleCodes.value.has(norm(code))
 const canAdd = computed(() => can('ERROR-ADD'))
 const canEdit = computed(() => can('ERROR-EDIT'))
 const canDelete = computed(() => can('ERROR-DELETE'))
+
+// Responsive logic
+const isMobile = ref(false)
+const checkMobile = () => {
+    isMobile.value = window.innerWidth < 768
+}
 
 const codeKey = v => String(v ?? '').trim().toUpperCase()
 const toYmd = s => {
@@ -269,6 +291,54 @@ watch(filteredRows, (rows) => {
 })
 
 onMounted(async () => {
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
     await Promise.all([fetchAll(), loadStages()])
 })
+
+onUnmounted(() => {
+    window.removeEventListener('resize', checkMobile)
+})
 </script>
+
+<style scoped>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.page-title {
+    margin: 0;
+    color: #c06252;
+    font-weight: 700;
+}
+
+.actions-wrap {
+    display: flex;
+    gap: 8px;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .page-title {
+        text-align: center;
+        font-size: 1.2rem;
+    }
+
+    .actions-wrap {
+        justify-content: center;
+    }
+
+    .actions-wrap > .ant-btn,
+    .actions-wrap > .ant-dropdown-trigger {
+        flex: 1;
+    }
+}
+</style>

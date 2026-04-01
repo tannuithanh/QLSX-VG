@@ -240,7 +240,7 @@ function render() {
                 radius: ['30%', '70%'],
                 center: ['50%', '52%'],
                 avoidLabelOverlap: true,
-                label: { show: true, formatter: ({ data }) => `${data.name}\n${(data._rate ?? 0).toFixed(1)}%`, fontFamily },
+                label: { show: true, formatter: ({ data }) => `${data.name}\n${Number(data._rate ?? 0).toFixed(2)}%`, fontFamily },
                 labelLine: { length: 12, length2: 10 },
                 data,
             }],
